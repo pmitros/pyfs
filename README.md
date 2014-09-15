@@ -1,6 +1,8 @@
 PyFilesystem
 ============
 
+This is a fork of pyfilesystem. The main version is [on Google Code](https://code.google.com/p/pyfilesystem/). It fixes an issue with authentication over VPC. My hope is the change will be merged back into pyfilesystem, and this repository will become obsolete. 
+
 PyFilesystem is an abstraction layer for *filesystems*. In the same way that Python's file-like objects provide a common way of accessing files, PyFilesystem provides a common way of accessing entire filesystems. You can write platform-independent code to work with local files, that also works with any of the supported filesystems (zip, ftp, S3 etc.).
 
 Pyfilesystem works with Linux, Windows and Mac.
