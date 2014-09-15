@@ -14,16 +14,15 @@ class TestPathFunctions(unittest.TestCase):
     """Testcases for FS path functions."""
 
     def test_normpath(self):
-        tests = [   ("\\a\\b\\c", "\\a\\b\\c"),
+        tests = [   ("\\a\\b\\c", "/a/b/c"),
                     (".", ""),
                     ("./", ""),
                     ("", ""),
-                    ("/.", "/"),
                     ("/a/b/c", "/a/b/c"),
                     ("a/b/c", "a/b/c"),
                     ("a/b/../c/", "a/c"),
                     ("/","/"),
-                    (u"a/\N{GREEK SMALL LETTER BETA}/c",u"a/\N{GREEK SMALL LETTER BETA}/c"),
+                    (u"a/\N{GREEK SMALL LETTER BETA}\\c",u"a/\N{GREEK SMALL LETTER BETA}/c"),
                     ]
         for path, result in tests:
             self.assertEqual(normpath(path), result)
@@ -39,7 +38,7 @@ class TestPathFunctions(unittest.TestCase):
                     ("a/b/c", "../d", "c", "a/b/d/c"),
                     ("a/b/c", "../d", "/a", "/a"),
                     ("aaa", "bbb/ccc", "aaa/bbb/ccc"),
-                    ("aaa", "bbb\\ccc", "aaa/bbb\\ccc"),
+                    ("aaa", "bbb\ccc", "aaa/bbb/ccc"),
                     ("aaa", "bbb", "ccc", "/aaa", "eee", "/aaa/eee"),
                     ("a/b", "./d", "e", "a/b/d/e"),
                     ("/", "/", "/"),
@@ -51,9 +50,7 @@ class TestPathFunctions(unittest.TestCase):
             result = testpaths[-1]
             self.assertEqual(pathjoin(*paths), result)
 
-        self.assertRaises(ValueError, pathjoin, "..")
         self.assertRaises(ValueError, pathjoin, "../")
-        self.assertRaises(ValueError, pathjoin, "/..")
         self.assertRaises(ValueError, pathjoin, "./../")
         self.assertRaises(ValueError, pathjoin, "a/b", "../../..")
         self.assertRaises(ValueError, pathjoin, "a/b/../../../d")
@@ -107,7 +104,7 @@ class TestPathFunctions(unittest.TestCase):
         self.assertEquals(recursepath("/hello/world/",reverse=True),["/hello/world","/hello","/"])
         self.assertEquals(recursepath("hello",reverse=True),["/hello","/"])
         self.assertEquals(recursepath("",reverse=True),["/"])
-
+        
     def test_isdotfile(self):
         for path in ['.foo',
                      '.svn',
@@ -115,14 +112,14 @@ class TestPathFunctions(unittest.TestCase):
                      'foo/bar/.svn',
                      '/foo/.bar']:
             self.assert_(isdotfile(path))
-
+        
         for path in ['asfoo',
                      'df.svn',
                      'foo/er.svn',
                      'foo/bar/test.txt',
                      '/foo/bar']:
             self.assertFalse(isdotfile(path))
-
+            
     def test_dirname(self):
         tests = [('foo', ''),
                  ('foo/bar', 'foo'),
@@ -132,7 +129,7 @@ class TestPathFunctions(unittest.TestCase):
                  ('/', '/')]
         for path, test_dirname in tests:
             self.assertEqual(dirname(path), test_dirname)
-
+            
     def test_basename(self):
         tests = [('foo', 'foo'),
                  ('foo/bar', 'bar'),
@@ -140,30 +137,6 @@ class TestPathFunctions(unittest.TestCase):
                  ('/', '')]
         for path, test_basename in tests:
             self.assertEqual(basename(path), test_basename)
-
-    def test_iswildcard(self):
-        self.assert_(iswildcard('*'))
-        self.assert_(iswildcard('*.jpg'))
-        self.assert_(iswildcard('foo/*'))
-        self.assert_(iswildcard('foo/{}'))
-        self.assertFalse(iswildcard('foo'))
-        self.assertFalse(iswildcard('img.jpg'))
-        self.assertFalse(iswildcard('foo/bar'))
-
-    def test_realtivefrom(self):
-        tests = [('/', '/foo.html', 'foo.html'),
-                 ('/foo', '/foo/bar.html', 'bar.html'),
-                 ('/foo/bar/', '/egg.html', '../../egg.html'),
-                 ('/a/b/c/d', 'e', '../../../../e'),
-                 ('/a/b/c/d', 'a/d', '../../../d'),
-                 ('/docs/', 'tags/index.html', '../tags/index.html'),
-                 ('foo/bar', 'baz/index.html', '../../baz/index.html'),
-                 ('', 'a', 'a'),
-                 ('a', 'b/c', '../b/c')
-                 ]
-
-        for base, path, result in tests:
-            self.assertEqual(relativefrom(base, path), result)
 
 
 class Test_PathMap(unittest.TestCase):

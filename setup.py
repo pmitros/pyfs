@@ -1,13 +1,7 @@
 #!/usr/bin/env python
 
-#from distribute_setup import use_setuptools
-#use_setuptools()
-
-from setuptools import setup
-import sys
-PY3 = sys.version_info >= (3,)
-
-VERSION = "0.5.1-dev"
+from distutils.core import setup
+from fs import __version__ as VERSION
 
 COMMANDS = ['fscat',
             'fscp',
@@ -23,37 +17,29 @@ COMMANDS = ['fscat',
 
 
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    'Development Status :: 3 - Alpha',
     'Intended Audience :: Developers',
     'License :: OSI Approved :: BSD License',
     'Operating System :: OS Independent',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 2.6',
-    'Programming Language :: Python :: 2.7',
-    'Programming Language :: Python :: 3',
     'Topic :: System :: Filesystems',
 ]
 
-with open('README.md', 'r') as f:
-    long_desc = f.read()
+long_desc = """Pyfilesystem is a module that provides a simplified common interface to many types of filesystem. Filesystems exposed via Pyfilesystem can also be served over the network, or 'mounted' on the native filesystem.
 
+Even if you only need to work with file and directories on the local hard-drive, Pyfilesystem can simplify your code and make it more robust -- with the added advantage that you can change where the files are located by changing a single line of code.
+"""
 
-extra = {}
-if PY3:
-    extra["use_2to3"] = True
-
-setup(install_requires=['setuptools', 'six'],
-      name='fs',
+setup(name='fs',
       version=VERSION,
-      description="Filesystem abstraction layer",
+      description="Filesystem abstraction",
       long_description=long_desc,
-      license="BSD",
+      license = "BSD",
       author="Will McGugan",
       author_email="will@willmcgugan.com",
-      #url="http://code.google.com/p/pyfilesystem/",
-      #download_url="http://code.google.com/p/pyfilesystem/downloads/list",
-      url="http://pypi.python.org/pypi/fs/",
-      platforms=['any'],
+      url="http://code.google.com/p/pyfilesystem/",
+      download_url="http://code.google.com/p/pyfilesystem/downloads/list",
+      platforms = ['any'],
       packages=['fs',
                 'fs.expose',
                 'fs.expose.dokan',
@@ -65,10 +51,9 @@ setup(install_requires=['setuptools', 'six'],
                 'fs.contrib',
                 'fs.contrib.bigfs',
                 'fs.contrib.davfs',
-                'fs.contrib.tahoelafs',
+                'fs.contrib.tahoelafs',                
                 'fs.commands'],
-      package_data={'fs': ['tests/data/*.txt']},
       scripts=['fs/commands/%s' % command for command in COMMANDS],
       classifiers=classifiers,
-      **extra
       )
+

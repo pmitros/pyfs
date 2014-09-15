@@ -29,7 +29,7 @@ from __future__ import with_statement
 import os
 import stat as statinfo
 import time
-import SocketServer
+import SocketServer as sockserv
 import threading
 
 import paramiko
@@ -44,23 +44,7 @@ from fs.utils import isdir
 
 # Default host key used by BaseSFTPServer
 #
-DEFAULT_HOST_KEY = paramiko.RSAKey.from_private_key(StringIO(
-    "-----BEGIN RSA PRIVATE KEY-----\n" \
-    "MIICXgIBAAKCAIEAl7sAF0x2O/HwLhG68b1uG8KHSOTqe3Cdlj5i/1RhO7E2BJ4B\n" \
-    "3jhKYDYtupRnMFbpu7fb21A24w3Y3W5gXzywBxR6dP2HgiSDVecoDg2uSYPjnlDk\n" \
-    "HrRuviSBG3XpJ/awn1DObxRIvJP4/sCqcMY8Ro/3qfmid5WmMpdCZ3EBeC0CAwEA\n" \
-    "AQKCAIBSGefUs5UOnr190C49/GiGMN6PPP78SFWdJKjgzEHI0P0PxofwPLlSEj7w\n" \
-    "RLkJWR4kazpWE7N/bNC6EK2pGueMN9Ag2GxdIRC5r1y8pdYbAkuFFwq9Tqa6j5B0\n" \
-    "GkkwEhrcFNBGx8UfzHESXe/uE16F+e8l6xBMcXLMJVo9Xjui6QJBAL9MsJEx93iO\n" \
-    "zwjoRpSNzWyZFhiHbcGJ0NahWzc3wASRU6L9M3JZ1VkabRuWwKNuEzEHNK8cLbRl\n" \
-    "TyH0mceWXcsCQQDLDEuWcOeoDteEpNhVJFkXJJfwZ4Rlxu42MDsQQ/paJCjt2ONU\n" \
-    "WBn/P6iYDTvxrt/8+CtLfYc+QQkrTnKn3cLnAkEAk3ixXR0h46Rj4j/9uSOfyyow\n" \
-    "qHQunlZ50hvNz8GAm4TU7v82m96449nFZtFObC69SLx/VsboTPsUh96idgRrBQJA\n" \
-    "QBfGeFt1VGAy+YTLYLzTfnGnoFQcv7+2i9ZXnn/Gs9N8M+/lekdBFYgzoKN0y4pG\n" \
-    "2+Q+Tlr2aNlAmrHtkT13+wJAJVgZATPI5X3UO0Wdf24f/w9+OY+QxKGl86tTQXzE\n" \
-    "4bwvYtUGufMIHiNeWP66i6fYCucXCMYtx6Xgu2hpdZZpFw==\n" \
-    "-----END RSA PRIVATE KEY-----\n"
-))
+DEFAULT_HOST_KEY = paramiko.RSAKey.from_private_key(StringIO("-----BEGIN RSA PRIVATE KEY-----\nMIICXgIBAAKCAIEAl7sAF0x2O/HwLhG68b1uG8KHSOTqe3Cdlj5i/1RhO7E2BJ4B\n3jhKYDYtupRnMFbpu7fb21A24w3Y3W5gXzywBxR6dP2HgiSDVecoDg2uSYPjnlDk\nHrRuviSBG3XpJ/awn1DObxRIvJP4/sCqcMY8Ro/3qfmid5WmMpdCZ3EBeC0CAwEA\nAQKCAIBSGefUs5UOnr190C49/GiGMN6PPP78SFWdJKjgzEHI0P0PxofwPLlSEj7w\nRLkJWR4kazpWE7N/bNC6EK2pGueMN9Ag2GxdIRC5r1y8pdYbAkuFFwq9Tqa6j5B0\nGkkwEhrcFNBGx8UfzHESXe/uE16F+e8l6xBMcXLMJVo9Xjui6QJBAL9MsJEx93iO\nzwjoRpSNzWyZFhiHbcGJ0NahWzc3wASRU6L9M3JZ1VkabRuWwKNuEzEHNK8cLbRl\nTyH0mceWXcsCQQDLDEuWcOeoDteEpNhVJFkXJJfwZ4Rlxu42MDsQQ/paJCjt2ONU\nWBn/P6iYDTvxrt/8+CtLfYc+QQkrTnKn3cLnAkEAk3ixXR0h46Rj4j/9uSOfyyow\nqHQunlZ50hvNz8GAm4TU7v82m96449nFZtFObC69SLx/VsboTPsUh96idgRrBQJA\nQBfGeFt1VGAy+YTLYLzTfnGnoFQcv7+2i9ZXnn/Gs9N8M+/lekdBFYgzoKN0y4pG\n2+Q+Tlr2aNlAmrHtkT13+wJAJVgZATPI5X3UO0Wdf24f/w9+OY+QxKGl86tTQXzE\n4bwvYtUGufMIHiNeWP66i6fYCucXCMYtx6Xgu2hpdZZpFw==\n-----END RSA PRIVATE KEY-----\n"))
 
 
 def report_sftp_errors(func):
@@ -71,8 +55,8 @@ def report_sftp_errors(func):
     """
     @wraps(func)
     def wrapper(*args,**kwds):
-        try:
-            return func(*args, **kwds)
+        try:            
+            return func(*args,**kwds)            
         except ResourceNotFoundError, e:
             return paramiko.SFTP_NO_SUCH_FILE
         except UnsupportedError, e:
@@ -101,12 +85,7 @@ class SFTPServerInterface(paramiko.SFTPServerInterface):
         if encoding is None:
             encoding = "utf8"
         self.encoding = encoding
-        super(SFTPServerInterface,self).__init__(server, *args, **kwds)
-
-    def close(self):
-        # Close the pyfs file system and dereference it.
-        self.fs.close()
-        self.fs = None
+        super(SFTPServerInterface,self).__init__(server,*args,**kwds)
 
     @report_sftp_errors
     def open(self, path, flags, attr):
@@ -117,38 +96,39 @@ class SFTPServerInterface(paramiko.SFTPServerInterface):
         if not isinstance(path, unicode):
             path = path.decode(self.encoding)
         stats = []
-        for entry in self.fs.listdir(path, absolute=True):
+        for entry in self.fs.listdir(path,absolute=True):
             stat = self.stat(entry)
             if not isinstance(stat, int):
-                stats.append(stat)
+                stats.append(stat)        
         return stats
-
+ 
     @report_sftp_errors
     def stat(self, path):
         if not isinstance(path, unicode):
             path = path.decode(self.encoding)
 
         info = self.fs.getinfo(path)
-
+        get = info.get
+                
         stat = paramiko.SFTPAttributes()
-        stat.filename = basename(path).encode(self.encoding)
-        stat.st_size = info.get("size")
-
+        stat.filename = basename(path).encode(self.encoding)                    
+        stat.st_size = info.get("size")          
+        
         if 'st_atime' in info:
-            stat.st_atime = info.get('st_atime')
+            stat.st_atime = get('st_atime')    
         elif 'accessed_time' in info:
-            stat.st_atime = time.mktime(info.get("accessed_time").timetuple())
-
+            stat.st_atime = time.mktime(get("accessed_time").timetuple())
+            
         if 'st_mtime' in info:
-            stat.st_mtime = info.get('st_mtime')
+            stat.st_mtime = get('st_mtime')
         else:
             if 'modified_time' in info:
-                stat.st_mtime = time.mktime(info.get("modified_time").timetuple())
-
+                stat.st_mtime = time.mktime(get("modified_time").timetuple())
+                        
         if isdir(self.fs, path, info):
             stat.st_mode = 0777 | statinfo.S_IFDIR
         else:
-            stat.st_mode = 0777 | statinfo.S_IFREG
+            stat.st_mode = 0777 | statinfo.S_IFREG        
         return stat
 
     def lstat(self, path):
@@ -156,7 +136,7 @@ class SFTPServerInterface(paramiko.SFTPServerInterface):
 
     @report_sftp_errors
     def remove(self, path):
-        if not isinstance(path, unicode):
+        if not isinstance(path,unicode):
             path = path.decode(self.encoding)
         self.fs.remove(path)
         return paramiko.SFTP_OK
@@ -175,25 +155,20 @@ class SFTPServerInterface(paramiko.SFTPServerInterface):
 
     @report_sftp_errors
     def mkdir(self, path, attr):
-        if not isinstance(path, unicode):
+        if not isinstance(path,unicode):
             path = path.decode(self.encoding)
         self.fs.makedir(path)
         return paramiko.SFTP_OK
 
     @report_sftp_errors
     def rmdir(self, path):
-        if not isinstance(path, unicode):
+        if not isinstance(path,unicode):
             path = path.decode(self.encoding)
         self.fs.removedir(path)
         return paramiko.SFTP_OK
 
     def canonicalize(self, path):
-        try:
-            return abspath(normpath(path)).encode(self.encoding)
-        except BackReferenceError:
-            # If the client tries to use backrefs to escape root, gently
-            # nudge them back to /.
-            return '/'
+        return abspath(normpath(path))
 
     @report_sftp_errors
     def chattr(self, path, attr):
@@ -221,13 +196,13 @@ class SFTPHandle(paramiko.SFTPHandle):
     """
 
     def __init__(self, owner, path, flags):
-        super(SFTPHandle, self).__init__(flags)
-        mode = flags_to_mode(flags)
+        super(SFTPHandle,self).__init__(flags)
+        mode = flags_to_mode(flags) + "b"
         self.owner = owner
-        if not isinstance(path, unicode):
+        if not isinstance(path,unicode):
             path = path.decode(self.owner.encoding)
         self.path = path
-        self._file = owner.fs.open(path, mode)
+        self._file = owner.fs.open(path,mode)
 
     @report_sftp_errors
     def close(self):
@@ -249,68 +224,36 @@ class SFTPHandle(paramiko.SFTPHandle):
         return self.owner.stat(self.path)
 
     def chattr(self,attr):
-        return self.owner.chattr(self.path, attr)
+        return self.owner.chattr(self.path,attr)
 
 
-class SFTPServer(paramiko.SFTPServer):
-    """
-    An SFTPServer class that closes the filesystem when done.
-    """
-
-    def finish_subsystem(self):
-        # Close the SFTPServerInterface, it will close the pyfs file system.
-        self.server.close()
-        super(SFTPServer, self).finish_subsystem()
-
-
-class SFTPRequestHandler(SocketServer.BaseRequestHandler):
+class SFTPRequestHandler(sockserv.StreamRequestHandler):
     """SocketServer RequestHandler subclass for BaseSFTPServer.
 
     This RequestHandler subclass creates a paramiko Transport, sets up the
     sftp subsystem, and hands off to the transport's own request handling
-    thread.
+    thread.  Note that paramiko.Transport uses a separate thread by default,
+    so there is no need to use ThreadingMixin.
     """
-    timeout = 60
-    auth_timeout = 60
-
-    def setup(self):
-        """
-        Creates the SSH transport. Sets security options.
-        """
-        self.transport = paramiko.Transport(self.request)
-        self.transport.load_server_moduli()
-        so = self.transport.get_security_options()
-        so.digests = ('hmac-sha1', )
-        so.compression = ('zlib@openssh.com', 'none')
-        self.transport.add_server_key(self.server.host_key)
-        self.transport.set_subsystem_handler("sftp", SFTPServer, SFTPServerInterface, self.server.fs, encoding=self.server.encoding)
 
     def handle(self):
-        """
-        Start the paramiko server, this will start a thread to handle the connection.
-        """
-        self.transport.start_server(server=BaseServerInterface())
-        # TODO: I like the code below _in theory_ but it does not work as I expected.
-        # Figure out how to actually time out a new client if they fail to auth in a
-        # certain amount of time.
-        #chan = self.transport.accept(self.auth_timeout)
-        #if chan is None:
-        #    self.transport.close()
-
-    def handle_timeout(self):
-        try:
-            self.transport.close()
-        finally:
-            super(SFTPRequestHandler, self).handle_timeout()
+        t = paramiko.Transport(self.request)
+        t.add_server_key(self.server.host_key)
+        t.set_subsystem_handler("sftp", paramiko.SFTPServer, SFTPServerInterface, self.server.fs, getattr(self.server,"encoding",None))
+        # Note that this actually spawns a new thread to handle the requests.
+        # (Actually, paramiko.Transport is a subclass of Thread)
+        t.start_server(server=self.server)
 
 
-
-class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
+class ThreadedTCPServer(sockserv.TCPServer, sockserv.ThreadingMixIn):
     pass
 
-
-class BaseSFTPServer(ThreadedTCPServer):
+class BaseSFTPServer(ThreadedTCPServer, paramiko.ServerInterface):
     """SocketServer.TCPServer subclass exposing an FS via SFTP.
+
+    BaseSFTPServer combines a simple SocketServer.TCPServer subclass with an
+    implementation of paramiko.ServerInterface, providing everything that's
+    needed to expose an FS via SFTP.
 
     Operation is in the standard SocketServer style.  The target FS object
     can be passed into the constructor, or set as an attribute on the server::
@@ -321,33 +264,6 @@ class BaseSFTPServer(ThreadedTCPServer):
     It is also possible to specify the host key used by the sever by setting
     the 'host_key' attribute.  If this is not specified, it will default to
     the key found in the DEFAULT_HOST_KEY variable.
-    """
-    # If the server stops/starts quickly, don't fail because of
-    # "port in use" error.
-    allow_reuse_address = True
-
-    def __init__(self, address, fs=None, encoding=None, host_key=None, RequestHandlerClass=None):
-        self.fs = fs
-        self.encoding = encoding
-        if host_key is None:
-            host_key = DEFAULT_HOST_KEY
-        self.host_key = host_key
-        if RequestHandlerClass is None:
-            RequestHandlerClass = SFTPRequestHandler
-        SocketServer.TCPServer.__init__(self, address, RequestHandlerClass)
-
-    def shutdown_request(self, request):
-        # Prevent TCPServer from closing the connection prematurely
-        return
-
-    def close_request(self, request):
-        # Prevent TCPServer from closing the connection prematurely
-        return
-
-
-class BaseServerInterface(paramiko.ServerInterface):
-    """
-    Paramiko ServerInterface implementation that performs user authentication.
 
     Note that this base class allows UNAUTHENTICATED ACCESS to the exposed
     FS.  This is intentional, since we can't guess what your authentication
@@ -357,7 +273,23 @@ class BaseServerInterface(paramiko.ServerInterface):
         * check_auth_none Check auth with no credentials
         * check_auth_password Check auth with a password
         * check_auth_publickey Check auth with a public key
+
     """
+
+    def __init__(self, address, fs=None, encoding=None, host_key=None, RequestHandlerClass=None):
+        self.fs = fs
+        self.encoding = encoding
+        if host_key is None:
+            host_key = DEFAULT_HOST_KEY
+        self.host_key = host_key
+        if RequestHandlerClass is None:
+            RequestHandlerClass = SFTPRequestHandler
+        sockserv.TCPServer.__init__(self,address,RequestHandlerClass)
+
+    def close_request(self, request):
+        #  paramiko.Transport closes itself when finished.
+        #  If we close it here, we'll break the Transport thread.
+        pass
 
     def check_channel_request(self, kind, chanid):
         if kind == 'session':

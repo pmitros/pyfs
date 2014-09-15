@@ -8,20 +8,19 @@ FTPFS is a filesystem for accessing an FTP server (uses ftplib in standard libra
 
 __all__ = ['FTPFS']
 
-import sys
+import sys 
 
 import fs
 from fs.base import *
 from fs.errors import *
 from fs.path import pathsplit, abspath, dirname, recursepath, normpath, pathjoin, isbase
-from fs import iotools
 
 from ftplib import FTP, error_perm, error_temp, error_proto, error_reply
 
 try:
-    from ftplib import _GLOBAL_DEFAULT_TIMEOUT
+    from ftplib import _GLOBAL_DEFAULT_TIMEOUT    
 except ImportError:
-    _GLOBAL_DEFAULT_TIMEOUT = object()
+    _GLOBAL_DEFAULT_TIMEOUT = object()    
 
 import threading
 import datetime
@@ -30,16 +29,10 @@ import calendar
 from socket import error as socket_error
 from fs.local_functools import wraps
 
-import six
-from six import PY3, b
-
-if PY3:
-    from six import BytesIO as StringIO
-else:
-    try:
-        from cStringIO import StringIO
-    except ImportError:
-        from StringIO import StringIO
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
 
 import time
 
@@ -337,7 +330,6 @@ class FTPListDataParser(object):
             i = 0
             while (i + 3) < len(result.name):
                 if result.name[i:i+4] == ' -> ':
-                    result.target = result.name[i+4:]
                     result.name = result.name[:i]
                     break
                 i += 1
@@ -598,15 +590,15 @@ def _skip(s, i, c):
     return i
 
 
-def fileftperrors(f):
+def fileftperrors(f):    
     @wraps(f)
     def deco(self, *args, **kwargs):
         self._lock.acquire()
-        try:
+        try:                        
             try:
                 ret = f(self, *args, **kwargs)
-            except Exception, e:
-                self.ftpfs._translate_exception(args[0] if args else '', e)
+            except Exception, e:                
+                self.ftpfs._translate_exception(args[0] if args else '', e)                        
         finally:
             self._lock.release()
         return ret
@@ -622,7 +614,7 @@ class _FTPFile(object):
 
     def __init__(self, ftpfs, ftp, path, mode):
         if not hasattr(self, '_lock'):
-            self._lock = threading.RLock()
+            self._lock = threading.RLock()        
         self.ftpfs = ftpfs
         self.ftp = ftp
         self.path = normpath(path)
@@ -656,7 +648,7 @@ class _FTPFile(object):
     @fileftperrors
     def read(self, size=None):
         if self.conn is None:
-            return b('')
+            return ''
 
         chunks = []
         if size is None or size < 0:
@@ -669,7 +661,7 @@ class _FTPFile(object):
                     break
                 chunks.append(data)
                 self.read_pos += len(data)
-            return b('').join(chunks)
+            return ''.join(chunks)
 
         remaining_bytes = size
         while remaining_bytes:
@@ -684,7 +676,7 @@ class _FTPFile(object):
             self.read_pos += len(data)
             remaining_bytes -= len(data)
 
-        return b('').join(chunks)
+        return ''.join(chunks)
 
     @fileftperrors
     def write(self, data):
@@ -744,7 +736,7 @@ class _FTPFile(object):
             self.ftp = self.ftpfs._open_ftp()
             self.ftp.sendcmd('TYPE I')
             self.ftp.sendcmd('REST %i' % (new_pos))
-            self.__init__(self.ftpfs, self.ftp, self.path, self.mode)
+            self.__init__(self.ftpfs, self.ftp, _encode(self.path), self.mode)
             self.read_pos = new_pos
         finally:
             self._lock.release()
@@ -762,29 +754,29 @@ class _FTPFile(object):
     def truncate(self, size=None):
         self.ftpfs._on_file_written(self.path)
         # Inefficient, but I don't know how else to implement this
-        if size is None:
+        if size is None:        
             size = self.tell()
-
-        if self.conn is not None:
+         
+        if self.conn is not None:           
             self.conn.close()
         self.close()
-
-        read_f = None
+                
+        read_f = None        
         try:
             read_f = self.ftpfs.open(self.path, 'rb')
             data = read_f.read(size)
         finally:
             if read_f is not None:
-                read_f.close()
-
-        self.ftp = self.ftpfs._open_ftp()
+                read_f.close()           
+            
+        self.ftp = self.ftpfs._open_ftp()        
         self.mode = 'w'
         self.__init__(self.ftpfs, self.ftp, _encode(self.path), self.mode)
-        #self._start_file(self.mode, self.path)
+        #self._start_file(self.mode, self.path)        
         self.write(data)
         if len(data) < size:
             self.write('\0' * (size - len(data)))
-
+        
 
     @fileftperrors
     def close(self):
@@ -802,7 +794,7 @@ class _FTPFile(object):
                 self.ftp.close()
             except error_temp, error_perm:
                 pass
-        self.closed = True
+        self.closed = True        
 
     def __iter__(self):
         return self.next()
@@ -814,11 +806,11 @@ class _FTPFile(object):
         This isn't terribly efficient. It would probably be better to do
         a read followed by splitlines.
         """
-        endings = b('\r\n')
+        endings = '\r\n'
         chars = []
         append = chars.append
         read = self.read
-        join = b('').join
+        join = ''.join
         while True:
             char = read(1)
             if not char:
@@ -839,7 +831,7 @@ class _FTPFile(object):
                     yield line
                     append(c)
 
-def ftperrors(f):
+def ftperrors(f):    
     @wraps(f)
     def deco(self, *args, **kwargs):
         self._lock.acquire()
@@ -851,33 +843,33 @@ def ftperrors(f):
                 except Exception, e:
                     self._translate_exception(args[0] if args else '', e)
             finally:
-                self._leave_dircache()
+                self._leave_dircache()                
         finally:
             self._lock.release()
         return ret
     return deco
 
 
-def _encode(s):
+def _encode(s):    
     if isinstance(s, unicode):
         return s.encode('utf-8')
     return s
 
 class _DirCache(dict):
-    def __init__(self):
-        super(_DirCache, self).__init__()
+    def __init__(self): 
+        super(_DirCache, self).__init__()       
         self.count = 0
-
+    
     def addref(self):
         self.count += 1
         return self.count
-
+        
     def decref(self):
         self.count -= 1
         return self.count
 
-class FTPFS(FS):
-
+class FTPFS(FS):    
+    
     _meta = { 'thread_safe' : True,
               'network' : True,
               'virtual': False,
@@ -885,16 +877,16 @@ class FTPFS(FS):
               'unicode_paths' : True,
               'case_insensitive_paths' : False,
               'atomic.move' : True,
-              'atomic.copy' : True,
+              'atomic.copy' : True,              
               'atomic.makedir' : True,
               'atomic.rename' : True,
               'atomic.setcontents' : False,
               'file.read_and_write' : False,
               }
 
-    def __init__(self, host='', user='', passwd='', acct='', timeout=_GLOBAL_DEFAULT_TIMEOUT, port=21, dircache=True, follow_symlinks=False):
+    def __init__(self, host='', user='', passwd='', acct='', timeout=_GLOBAL_DEFAULT_TIMEOUT, port=21, dircache=True):
         """Connect to a FTP server.
-
+        
         :param host: Host to connect to
         :param user: Username, or a blank string for anonymous
         :param passwd: Password, if required
@@ -904,7 +896,7 @@ class FTPFS(FS):
         :param dircache: If True then directory information will be cached,
             speeding up operations such as `getinfo`, `isdir`, `isfile`, but
             changes to the ftp file structure will not be visible until
-            :meth:`~fs.ftpfs.FTPFS.clear_dircache` is called
+            :meth:`~fs.ftpfs.FTPFS.clear_dircache` is called                
 
         """
 
@@ -917,29 +909,28 @@ class FTPFS(FS):
         self.acct = acct
         self.timeout = timeout
         self.default_timeout = timeout is _GLOBAL_DEFAULT_TIMEOUT
-        self.use_dircache = dircache
-        self.follow_symlinks = follow_symlinks
+        self.use_dircache = dircache            
 
         self.use_mlst = False
         self._lock = threading.RLock()
         self._init_dircache()
-
+                    
         self._cache_hint = False
-        try:
+        try:        
             self.ftp
         except FSError:
             self.closed = True
             raise
 
-    def _init_dircache(self):
+    def _init_dircache(self):        
         self.dircache = _DirCache()
 
     @synchronize
-    def cache_hint(self, enabled):
+    def cache_hint(self, enabled):        
         self._cache_hint = bool(enabled)
 
     def _enter_dircache(self):
-        self.dircache.addref()
+        self.dircache.addref()        
 
     def _leave_dircache(self):
         self.dircache.decref()
@@ -948,8 +939,8 @@ class FTPFS(FS):
                 self.clear_dircache()
         else:
             self.clear_dircache()
-        assert self.dircache.count >= 0, "dircache count should never be negative"
-
+        assert self.dircache.count >= 0, "dircache count should never be negative"                    
+    
     @synchronize
     def _on_file_written(self, path):
         self.refresh_dircache(dirname(path))
@@ -982,7 +973,7 @@ class FTPFS(FS):
 
         def on_line(line):
             if not isinstance(line, unicode):
-                line = line.decode('utf-8')
+                line = line.decode('utf-8')                
             info = parse_ftp_list_line(line, self.use_mlst)
             if info:
                 info = info.__dict__
@@ -1020,30 +1011,6 @@ class FTPFS(FS):
             pass
         self.dircache[path] = dirlist
 
-        def is_symlink(info):
-            return info['try_retr'] and info['try_cwd'] and info.has_key('target')
-
-        def resolve_symlink(linkpath):
-            linkinfo = self.getinfo(linkpath)
-            if not linkinfo.has_key('resolved'):
-                linkinfo['resolved'] = linkpath
-            if is_symlink(linkinfo):
-                target = linkinfo['target']
-                base, fname = pathsplit(linkpath)
-                return resolve_symlink(pathjoin(base, target))
-            else:
-                return linkinfo
-
-        if self.follow_symlinks:
-            for name in dirlist:
-                if is_symlink(dirlist[name]):
-                    target = dirlist[name]['target']
-                    linkinfo = resolve_symlink(pathjoin(path, target))
-                    for key in linkinfo:
-                        if key != 'name':
-                            dirlist[name][key] = linkinfo[key]
-                    del dirlist[name]['target']
-
         return dirlist
 
     @synchronize
@@ -1054,24 +1021,24 @@ class FTPFS(FS):
         :param path: Path of directory to clear cache for, or all directories if
         None (the default)
 
-        """
+        """        
 
         if not paths:
             self.dircache.clear()
-        else:
+        else:            
             dircache = self.dircache
             paths = [normpath(abspath(path)) for path in paths]
-            for cached_path in dircache.keys():
+            for cached_path in dircache.keys():                
                 for path in paths:
                     if isbase(cached_path, path):
                         dircache.pop(cached_path, None)
                         break
-
+    
     @synchronize
-    def refresh_dircache(self, *paths):
+    def refresh_dircache(self, *paths):                                     
         for path in paths:
             path = abspath(normpath(path))
-            self.dircache.pop(path, None)
+            self.dircache.pop(path, None)      
 
     @synchronize
     def _check_path(self, path):
@@ -1092,20 +1059,20 @@ class FTPFS(FS):
     @ftperrors
     def get_ftp(self):
         if self.closed:
-            return None
+            return None        
         if not getattr(self, '_ftp', None):
             self._ftp = self._open_ftp()
-        return self._ftp
-
+        return self._ftp          
+      
     ftp = property(get_ftp)
 
     @ftperrors
     def _open_ftp(self):
         try:
-            ftp = FTP()
+            ftp = FTP()            
             if self.default_timeout or sys.version_info < (2,6,):
                 ftp.connect(self.host, self.port)
-            else:
+            else:                
                 ftp.connect(self.host, self.port, self.timeout)
             ftp.login(self.user, self.passwd, self.acct)
         except socket_error, e:
@@ -1113,13 +1080,13 @@ class FTPFS(FS):
         return ftp
 
     def __getstate__(self):
-        state = super(FTPFS, self).__getstate__()
+        state = super(FTPFS, self).__getstate__()        
         del state['_lock']
         state.pop('_ftp', None)
         return state
 
     def __setstate__(self,state):
-        super(FTPFS, self).__setstate__(state)
+        super(FTPFS, self).__setstate__(state)        
         self._init_dircache()
         self._lock = threading.RLock()
         #self._ftp = None
@@ -1154,7 +1121,7 @@ class FTPFS(FS):
             code, message = str(exception).split(' ', 1)
             code = int(code)
             if code == 550:
-                pass
+                pass                
             if code == 552:
                 raise StorageSpaceError
             raise PermissionDeniedError(str(exception), path=path, msg="FTP error: %s" % str(exception), details=exception)
@@ -1167,56 +1134,53 @@ class FTPFS(FS):
             try:
                 self.ftp.close()
             except FSError:
-                pass
+                pass        
             self.closed = True
 
     def getpathurl(self, path, allow_none=False):
         path = normpath(path)
-        credentials = '%s:%s' % (self.user, self.passwd)
-        if credentials == ':':
+        credentials = '%s:%s' % (self.user, self.passwd)        
+        if credentials == ':':            
             url = 'ftp://%s%s' % (self.host.rstrip('/'), abspath(path))
         else:
-            url = 'ftp://%s@%s%s' % (credentials, self.host.rstrip('/'), abspath(path))
-        return url
+            url = 'ftp://%s@%s%s' % (credentials, self.host.rstrip('/'), abspath(path))        
+        return url             
 
-    @iotools.filelike_to_stream
     @ftperrors
-    def open(self, path, mode, buffering=-1, encoding=None, errors=None, newline=None, line_buffering=False, **kwargs):
+    def open(self, path, mode='r'):
         path = normpath(path)
-        mode = mode.lower()
+        mode = mode.lower()        
         if self.isdir(path):
-            raise ResourceInvalidError(path)
+            raise ResourceInvalidError(path)        
         if 'r' in mode or 'a' in mode:
             if not self.isfile(path):
                 raise ResourceNotFoundError(path)
         if 'w' in mode or 'a' in mode or '+' in mode:
             self.refresh_dircache(dirname(path))
         ftp = self._open_ftp()
-        f = _FTPFile(self, ftp, normpath(path), mode)
-        return f
-
+        f = _FTPFile(self, ftp, normpath(path), mode) 
+        return f 
+    
     @ftperrors
-    def setcontents(self, path, data=b'', encoding=None, errors=None, chunk_size=1024*64):
-        path = normpath(path)
-        data = iotools.make_bytes_io(data, encoding=encoding, errors=errors)
-        self.refresh_dircache(dirname(path))
-        self.ftp.storbinary('STOR %s' % _encode(path), data, blocksize=chunk_size)
-
+    def setcontents(self, path, data, chunk_size=1024*64):        
+        path = normpath(path)        
+        if isinstance(data, basestring):
+            data = StringIO(data)        
+        self.refresh_dircache(dirname(path))        
+        self.ftp.storbinary('STOR %s' % _encode(path), data, blocksize=chunk_size)        
+        
     @ftperrors
-    def getcontents(self, path, mode="rb", encoding=None, errors=None, newline=None):
-        path = normpath(path)
-        contents = StringIO()
-        self.ftp.retrbinary('RETR %s' % _encode(path), contents.write, blocksize=1024*64)
-        data = contents.getvalue()
-        if 'b' in data:
-            return data
-        return iotools.decode_binary(data, encoding=encoding, errors=errors)
+    def getcontents(self, path):
+        path = normpath(path) 
+        contents = StringIO()                            
+        self.ftp.retrbinary('RETR %s' % _encode(path), contents.write, blocksize=1024*64)            
+        return contents.getvalue()        
 
     @ftperrors
     def exists(self, path):
         path = normpath(path)
         if path in ('', '/'):
-            return True
+            return True        
         dirlist, fname = self._get_dirlist(path)
         return fname in dirlist
 
@@ -1243,7 +1207,7 @@ class FTPFS(FS):
         return not info['try_cwd']
 
     @ftperrors
-    def listdir(self, path="./", wildcard=None, full=False, absolute=False, dirs_only=False, files_only=False):
+    def listdir(self, path="./", wildcard=None, full=False, absolute=False, dirs_only=False, files_only=False):                
         path = normpath(path)
         #self.clear_dircache(path)
         if not self.exists(path):
@@ -1272,7 +1236,7 @@ class FTPFS(FS):
                 return {}
 
         return [(p, getinfo(p))
-                    for p in self.listdir(path,
+                    for p in self.listdir(path,                                          
                                           wildcard=wildcard,
                                           full=full,
                                           absolute=absolute,
@@ -1311,16 +1275,16 @@ class FTPFS(FS):
                     if self.isfile(path):
                         raise ResourceInvalidError(path)
                     raise DestinationExistsError(path)
-            checkdir(path)
+            checkdir(path)        
 
     @ftperrors
-    def remove(self, path):
+    def remove(self, path):        
         if not self.exists(path):
             raise ResourceNotFoundError(path)
         if not self.isfile(path):
             raise ResourceInvalidError(path)
-        self.refresh_dircache(dirname(path))
-        self.ftp.delete(_encode(path))
+        self.refresh_dircache(dirname(path))        
+        self.ftp.delete(_encode(path))        
 
     @ftperrors
     def removedir(self, path, recursive=False, force=False):
@@ -1329,8 +1293,6 @@ class FTPFS(FS):
             raise ResourceNotFoundError(path)
         if self.isfile(path):
             raise ResourceInvalidError(path)
-        if normpath(path) in ('', '/'):
-            raise RemoveRootError(path)
 
         if not force:
             for _checkpath in self.listdir(path):
@@ -1351,17 +1313,16 @@ class FTPFS(FS):
             pass
         if recursive:
             try:
-                if dirname(path) not in ('', '/'):
-                    self.removedir(dirname(path), recursive=True)
+                self.removedir(dirname(path), recursive=True)
             except DirectoryNotEmptyError:
                 pass
         self.clear_dircache(dirname(path), path)
 
     @ftperrors
-    def rename(self, src, dst):
+    def rename(self, src, dst):        
         try:
             self.refresh_dircache(dirname(src), dirname(dst))
-            self.ftp.rename(_encode(src), _encode(dst))
+            self.ftp.rename(_encode(src), _encode(dst))            
         except error_perm, exception:
             code, message = str(exception).split(' ', 1)
             if code == "550":
@@ -1369,7 +1330,7 @@ class FTPFS(FS):
                     raise ParentDirectoryMissingError(dst)
             raise
         except error_reply:
-            pass
+            pass        
 
     @ftperrors
     def getinfo(self, path):
@@ -1416,46 +1377,46 @@ class FTPFS(FS):
     def move(self, src, dst, overwrite=False, chunk_size=16384):
         if not overwrite and self.exists(dst):
             raise DestinationExistsError(dst)
-        #self.refresh_dircache(dirname(src), dirname(dst))
+        #self.refresh_dircache(dirname(src), dirname(dst))        
         try:
             self.rename(src, dst)
         except:
             self.copy(src, dst, overwrite=overwrite)
             self.remove(src)
         finally:
-            self.refresh_dircache(src, dirname(src), dst, dirname(dst))
-
-    @ftperrors
-    def copy(self, src, dst, overwrite=False, chunk_size=1024*64):
+            self.refresh_dircache(src, dirname(src), dst, dirname(dst))                    
+    
+    @ftperrors        
+    def copy(self, src, dst, overwrite=False, chunk_size=1024*64):        
         if not self.isfile(src):
             if self.isdir(src):
                 raise ResourceInvalidError(src, msg="Source is not a file: %(path)s")
             raise ResourceNotFoundError(src)
         if not overwrite and self.exists(dst):
             raise DestinationExistsError(dst)
-
+    
         dst = normpath(dst)
-        src_file = None
+        src_file = None            
         try:
             src_file = self.open(src, "rb")
-            ftp = self._open_ftp()
-            ftp.voidcmd('TYPE I')
-            ftp.storbinary('STOR %s' % _encode(normpath(dst)), src_file, blocksize=chunk_size)
+            ftp = self._open_ftp()  
+            ftp.voidcmd('TYPE I')              
+            ftp.storbinary('STOR %s' % _encode(normpath(dst)), src_file, blocksize=chunk_size)                                                    
         finally:
-            self.refresh_dircache(dirname(dst))
+            self.refresh_dircache(dirname(dst))            
             if src_file is not None:
-                src_file.close()
-
+                src_file.close()   
+                         
 
     @ftperrors
     def movedir(self, src, dst, overwrite=False, ignore_errors=False, chunk_size=16384):
-        self.clear_dircache(dirname(src), dirname(dst))
-        super(FTPFS, self).movedir(src, dst, overwrite, ignore_errors, chunk_size)
+        self.clear_dircache(dirname(src), dirname(dst))        
+        super(FTPFS, self).movedir(src, dst, overwrite, ignore_errors, chunk_size)        
 
     @ftperrors
     def copydir(self, src, dst, overwrite=False, ignore_errors=False, chunk_size=16384):
-        self.clear_dircache(dirname(dst))
-        super(FTPFS, self).copydir(src, dst, overwrite, ignore_errors, chunk_size)
+        self.clear_dircache(dirname(dst))        
+        super(FTPFS, self).copydir(src, dst, overwrite, ignore_errors, chunk_size)        
 
 
 if __name__ == "__main__":

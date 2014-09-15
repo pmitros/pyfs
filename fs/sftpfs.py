@@ -2,8 +2,6 @@
 fs.sftpfs
 =========
 
-**Currently only avaiable on Python2 due to paramiko not being available for Python3**
-
 Filesystem accessing an SFTP server (via paramiko)
 
 """
@@ -14,21 +12,15 @@ import threading
 import os
 import paramiko
 from getpass import getuser
-import errno
+from binascii import hexlify
 
 from fs.base import *
 from fs.path import *
 from fs.errors import *
 from fs.utils import isdir, isfile
-from fs import iotools
-
-
-ENOENT = errno.ENOENT
-
 
 class WrongHostKeyError(RemoteConnectionError):
     pass
-
 
 # SFTPClient appears to not be thread-safe, so we use an instance per thread
 if hasattr(threading, "local"):
@@ -40,18 +32,17 @@ else:
     class thread_local(object):
         def __init__(self):
             self._map = {}
-
-        def __getattr__(self, attr):
+        def __getattr__(self,attr):
             try:
-                return self._map[(threading.currentThread().ident, attr)]
+                return self._map[(threading.currentThread().ident,attr)]
             except KeyError:
-                raise AttributeError(attr)
+                raise AttributeError, attr
+        def __setattr__(self,attr,value):
+            self._map[(threading.currentThread().ident,attr)] = value
 
-        def __setattr__(self, attr, value):
-            self._map[(threading.currentThread().ident, attr)] = value
 
 
-if not hasattr(paramiko.SFTPFile, "__enter__"):
+if not hasattr(paramiko.SFTPFile,"__enter__"):
     paramiko.SFTPFile.__enter__ = lambda self: self
     paramiko.SFTPFile.__exit__ = lambda self,et,ev,tb: self.close() and False
 
@@ -61,7 +52,7 @@ class SFTPFS(FS):
 
     This is basically a compatibility wrapper for the excellent SFTPClient
     class in the paramiko module.
-
+    
     """
 
     _meta = { 'thread_safe' : True,
@@ -77,17 +68,8 @@ class SFTPFS(FS):
               'atomic.setcontents' : False
               }
 
-    def __init__(self,
-                 connection,
-                 root_path="/",
-                 encoding=None,
-                 hostkey=None,
-                 username='',
-                 password=None,
-                 pkey=None,
-                 agent_auth=True,
-                 no_auth=False,
-                 look_for_keys=True):
+
+    def __init__(self, connection, root_path="/", encoding=None, hostkey=None, username='', password=None, pkey=None, agent_auth=True, no_auth=False):
         """SFTPFS constructor.
 
         The only required argument is 'connection', which must be something
@@ -100,8 +82,8 @@ class SFTPFS(FS):
             * a paramiko.Channel instance in "sftp" mode
 
         The keyword argument 'root_path' specifies the root directory on the
-        remote machine - access to files outside this root will be prevented.
-
+        remote machine - access to files outside this root will be prevented. 
+        
         :param connection: a connection string
         :param root_path: The root path to open
         :param encoding: String encoding of paths (defaults to UTF-8)
@@ -111,15 +93,14 @@ class SFTPFS(FS):
         :param pkey: Public key
         :param agent_auth: attempt to authorize with the user's public keys
         :param no_auth: attempt to log in without any kind of authorization
-        :param look_for_keys: Look for keys in the same locations as ssh,
-            if other authentication is not succesful
-
+        
         """
+        
         credentials = dict(username=username,
                            password=password,
                            pkey=pkey)
         self.credentials = credentials
-
+        
         if encoding is None:
             encoding = "utf8"
         self.encoding = encoding
@@ -129,16 +110,16 @@ class SFTPFS(FS):
         self._tlocal = thread_local()
         self._transport = None
         self._client = None
-
+                
         self.hostname = None
         if isinstance(connection, basestring):
             self.hostname = connection
         elif isinstance(connection, tuple):
-            self.hostname = '%s:%s' % connection
-
-        super(SFTPFS, self).__init__()
+            self.hostname = '%s:%s' % connection        
+                    
+        super(SFTPFS, self).__init__()        
         self.root_path = abspath(normpath(root_path))
-
+        
         if isinstance(connection,paramiko.Channel):
             self._transport = None
             self._client = paramiko.SFTPClient(connection)
@@ -147,111 +128,75 @@ class SFTPFS(FS):
                 connection = paramiko.Transport(connection)
                 connection.daemon = True
                 self._owns_transport = True
-
+            
         if hostkey is not None:
             key = self.get_remote_server_key()
             if hostkey != key:
                 raise WrongHostKeyError('Host keys do not match')
-
+                        
         connection.start_client()
-
+        
         if not connection.is_active():
             raise RemoteConnectionError(msg='Unable to connect')
-
-        if no_auth:
+        
+        if no_auth:            
             try:
                 connection.auth_none('')
-            except paramiko.SSHException:
+            except paramiko.SSHException:                
                 pass
-
+        
         elif not connection.is_authenticated():
             if not username:
-                username = getuser()
-            try:
-                if pkey:
-                    connection.auth_publickey(username, pkey)
-
-                if not connection.is_authenticated() and password:
-                    connection.auth_password(username, password)
-
+                username = getuser()                
+            try:                
+                if pkey:                    
+                    connection.auth_publickey(username, pkey)                    
+                
+                if not connection.is_authenticated() and password:                        
+                    connection.auth_password(username, password)                                                    
+                                  
                 if agent_auth and not connection.is_authenticated():
-                    self._agent_auth(connection, username)
-
-                if look_for_keys and not connection.is_authenticated():
-                    self._userkeys_auth(connection, username, password)
-
-                if not connection.is_authenticated():
-                    try:
+                    self._agent_auth(connection, username)                    
+                
+                if not connection.is_authenticated():                    
+                    try:                
                         connection.auth_none(username)
                     except paramiko.BadAuthenticationType, e:
                         self.close()
                         allowed = ', '.join(e.allowed_types)
-                        raise RemoteConnectionError(msg='no auth - server requires one of the following: %s' % allowed, details=e)
-
+                        raise RemoteConnectionError(msg='no auth - server requires one of the following: %s' % allowed, details=e)                                
+                
                 if not connection.is_authenticated():
-                    self.close()
+                    self.close()                                                        
                     raise RemoteConnectionError(msg='no auth')
-
+                
             except paramiko.SSHException, e:
-                self.close()
+                self.close()                                
                 raise RemoteConnectionError(msg='SSH exception (%s)' % str(e), details=e)
-
+                
         self._transport = connection
-
+            
     def __unicode__(self):
-        return u'<SFTPFS: %s>' % self.desc('/')
-
+        return '<SFTPFS: %s>' % self.desc('/')
+        
     @classmethod
     def _agent_auth(cls, transport, username):
         """
         Attempt to authenticate to the given transport using any of the private
         keys available from an SSH agent.
         """
-
+        
         agent = paramiko.Agent()
         agent_keys = agent.get_keys()
         if not agent_keys:
-            return None
-        for key in agent_keys:
-            try:
-                transport.auth_publickey(username, key)
+            return None        
+        for key in agent_keys:            
+            try:                
+                transport.auth_publickey(username, key)                
                 return key
             except paramiko.SSHException:
                 pass
-        return None
-
-    @classmethod
-    def _userkeys_auth(cls, transport, username, password):
-        """
-        Attempt to authenticate to the given transport using any of the private
-        keys in the users ~/.ssh and ~/ssh dirs
-
-        Derived from http://www.lag.net/paramiko/docs/paramiko.client-pysrc.html
-        """
-
-        keyfiles = []
-        rsa_key = os.path.expanduser('~/.ssh/id_rsa')
-        dsa_key = os.path.expanduser('~/.ssh/id_dsa')
-        if os.path.isfile(rsa_key):
-            keyfiles.append((paramiko.rsakey.RSAKey, rsa_key))
-        if os.path.isfile(dsa_key):
-            keyfiles.append((paramiko.dsskey.DSSKey, dsa_key))
-        # look in ~/ssh/ for windows users:
-        rsa_key = os.path.expanduser('~/ssh/id_rsa')
-        dsa_key = os.path.expanduser('~/ssh/id_dsa')
-        if os.path.isfile(rsa_key):
-            keyfiles.append((paramiko.rsakey.RSAKey, rsa_key))
-        if os.path.isfile(dsa_key):
-            keyfiles.append((paramiko.dsskey.DSSKey, dsa_key))
-
-        for pkey_class, filename in keyfiles:
-            key = pkey_class.from_private_key_file(filename, password)
-            try:
-                transport.auth_publickey(username, key)
-                return key
-            except paramiko.SSHException:
-                pass
-        return None
+        return None       
 
     def __del__(self):
         self.close()
@@ -263,9 +208,9 @@ class SFTPFS(FS):
         if self._owns_transport:
             state['_transport'] = self._transport.getpeername()
         return state
-
+   
     def __setstate__(self,state):
-        super(SFTPFS, self).__setstate__(state)
+        super(SFTPFS, self).__setstate__(state) 
         #for (k,v) in state.iteritems():
         #    self.__dict__[k] = v
         #self._lock = threading.RLock()
@@ -306,44 +251,42 @@ class SFTPFS(FS):
                 self._transport.close()
             self.closed = True
 
-    def _normpath(self, path):
-        if not isinstance(path, unicode):
+    def _normpath(self,path):
+        if not isinstance(path,unicode):
             path = path.decode(self.encoding)
-        npath = pathjoin(self.root_path, relpath(normpath(path)))
-        if not isprefix(self.root_path, npath):
-            raise PathError(path, msg="Path is outside root: %(path)s")
+        npath = pathjoin(self.root_path,relpath(normpath(path)))
+        if not isprefix(self.root_path,npath):
+            raise PathError(path,msg="Path is outside root: %(path)s")
         return npath
 
-    def getpathurl(self, path, allow_none=False):
-        path = self._normpath(path)
+    def getpathurl(self, path, allow_none=False):        
+        path = self._normpath(path)        
         if self.hostname is None:
             if allow_none:
                 return None
-            raise NoPathURLError(path=path)
+            raise NoPathURLError(path=path)                
         username = self.credentials.get('username', '') or ''
         password = self.credentials.get('password', '') or ''
-        credentials = ('%s:%s' % (username, password)).rstrip(':')
-        if credentials:
+        credentials = ('%s:%s' % (username, password)).rstrip(':')        
+        if credentials:            
             url = 'sftp://%s@%s%s' % (credentials, self.hostname.rstrip('/'), abspath(path))
         else:
-            url = 'sftp://%s%s' % (self.hostname.rstrip('/'), abspath(path))
-        return url
+            url = 'sftp://%s%s' % (self.hostname.rstrip('/'), abspath(path))                    
+        return url      
 
     @synchronize
     @convert_os_errors
-    @iotools.filelike_to_stream
-    def open(self, path, mode='r', buffering=-1, encoding=None, errors=None, newline=None, line_buffering=False, bufsize=-1, **kwargs):
+    def open(self,path,mode="rb",bufsize=-1):
         npath = self._normpath(path)
         if self.isdir(path):
             msg = "that's a directory: %(path)s"
-            raise ResourceInvalidError(path, msg=msg)
+            raise ResourceInvalidError(path,msg=msg)
         #  paramiko implements its own buffering and write-back logic,
         #  so we don't need to use a RemoteFileBuffer here.
-        f = self.client.open(npath, mode, bufsize)
+        f = self.client.open(npath,mode,bufsize)
         #  Unfortunately it has a broken truncate() method.
         #  TODO: implement this as a wrapper
         old_truncate = f.truncate
-
         def new_truncate(size=None):
             if size is None:
                 size = f.tell()
@@ -362,14 +305,14 @@ class SFTPFS(FS):
 
     @synchronize
     @convert_os_errors
-    def exists(self, path):
+    def exists(self,path):
         if path in ('', '/'):
             return True
         npath = self._normpath(path)
         try:
             self.client.stat(npath)
         except IOError, e:
-            if getattr(e,"errno",None) == ENOENT:
+            if getattr(e,"errno",None) == 2:
                 return False
             raise
         return True
@@ -377,16 +320,16 @@ class SFTPFS(FS):
     @synchronize
     @convert_os_errors
     def isdir(self,path):
-        if normpath(path) in ('', '/'):
+        if path in ('', '/'):
             return True
         npath = self._normpath(path)
         try:
             stat = self.client.stat(npath)
         except IOError, e:
-            if getattr(e,"errno",None) == ENOENT:
+            if getattr(e,"errno",None) == 2:
                 return False
             raise
-        return statinfo.S_ISDIR(stat.st_mode) != 0
+        return statinfo.S_ISDIR(stat.st_mode)
 
     @synchronize
     @convert_os_errors
@@ -395,32 +338,32 @@ class SFTPFS(FS):
         try:
             stat = self.client.stat(npath)
         except IOError, e:
-            if getattr(e,"errno",None) == ENOENT:
+            if getattr(e,"errno",None) == 2:
                 return False
             raise
-        return statinfo.S_ISREG(stat.st_mode) != 0
+        return statinfo.S_ISREG(stat.st_mode)
 
     @synchronize
     @convert_os_errors
     def listdir(self,path="./",wildcard=None,full=False,absolute=False,dirs_only=False,files_only=False):
         npath = self._normpath(path)
-        try:
+        try:            
             attrs_map = None
-            if dirs_only or files_only:
+            if dirs_only or files_only:                
                 attrs = self.client.listdir_attr(npath)
                 attrs_map = dict((a.filename, a) for a in attrs)
-                paths = list(attrs_map.iterkeys())
+                paths = list(attrs_map.iterkeys())                                            
             else:
-                paths = self.client.listdir(npath)
+                paths = self.client.listdir(npath)                                            
         except IOError, e:
-            if getattr(e,"errno",None) == ENOENT:
+            if getattr(e,"errno",None) == 2:
                 if self.isfile(path):
                     raise ResourceInvalidError(path,msg="Can't list directory contents of a file: %(path)s")
                 raise ResourceNotFoundError(path)
             elif self.isfile(path):
                 raise ResourceInvalidError(path,msg="Can't list directory contents of a file: %(path)s")
-            raise
-
+            raise                        
+                
         if attrs_map:
             if dirs_only:
                 filter_paths = []
@@ -433,31 +376,31 @@ class SFTPFS(FS):
                 for apath, attr in attrs_map.iteritems():
                     if isfile(self, apath, attr.__dict__):
                         filter_paths.append(apath)
-                paths = filter_paths
-
+                paths = filter_paths                
+        
         for (i,p) in enumerate(paths):
             if not isinstance(p,unicode):
-                paths[i] = p.decode(self.encoding)
-
+                paths[i] = p.decode(self.encoding)                        
+                
         return self._listdir_helper(path, paths, wildcard, full, absolute, False, False)
 
     @synchronize
     @convert_os_errors
     def listdirinfo(self,path="./",wildcard=None,full=False,absolute=False,dirs_only=False,files_only=False):
         npath = self._normpath(path)
-        try:
+        try:            
             attrs = self.client.listdir_attr(npath)
-            attrs_map = dict((a.filename, a) for a in attrs)
-            paths = attrs_map.keys()
+            attrs_map = dict((a.filename, a) for a in attrs)                        
+            paths = attrs_map.keys()            
         except IOError, e:
-            if getattr(e,"errno",None) == ENOENT:
+            if getattr(e,"errno",None) == 2:
                 if self.isfile(path):
                     raise ResourceInvalidError(path,msg="Can't list directory contents of a file: %(path)s")
                 raise ResourceNotFoundError(path)
             elif self.isfile(path):
                 raise ResourceInvalidError(path,msg="Can't list directory contents of a file: %(path)s")
             raise
-
+            
         if dirs_only:
             filter_paths = []
             for path, attr in attrs_map.iteritems():
@@ -470,19 +413,19 @@ class SFTPFS(FS):
                 if isfile(self, path, attr.__dict__):
                     filter_paths.append(path)
             paths = filter_paths
-
+            
         for (i, p) in enumerate(paths):
             if not isinstance(p, unicode):
                 paths[i] = p.decode(self.encoding)
-
+                
         def getinfo(p):
             resourcename = basename(p)
             info = attrs_map.get(resourcename)
             if info is None:
                 return self.getinfo(pathjoin(path, p))
             return self._extract_info(info.__dict__)
-
-        return [(p, getinfo(p)) for p in
+                
+        return [(p, getinfo(p)) for p in 
                     self._listdir_helper(path, paths, wildcard, full, absolute, False, False)]
 
     @synchronize
@@ -520,7 +463,7 @@ class SFTPFS(FS):
         try:
             self.client.remove(npath)
         except IOError, e:
-            if getattr(e,"errno",None) == ENOENT:
+            if getattr(e,"errno",None) == 2:
                 raise ResourceNotFoundError(path)
             elif self.isdir(path):
                 raise ResourceInvalidError(path,msg="Cannot use remove() on a directory: %(path)s")
@@ -530,8 +473,8 @@ class SFTPFS(FS):
     @convert_os_errors
     def removedir(self,path,recursive=False,force=False):
         npath = self._normpath(path)
-        if normpath(path) in ('', '/'):
-            raise RemoveRootError(path)
+        if path in ("","/"):
+            return
         if force:
             for path2 in self.listdir(path,absolute=True):
                 try:
@@ -543,18 +486,17 @@ class SFTPFS(FS):
         try:
             self.client.rmdir(npath)
         except IOError, e:
-            if getattr(e,"errno",None) == ENOENT:
+            if getattr(e,"errno",None) == 2:
                 if self.isfile(path):
                     raise ResourceInvalidError(path,msg="Can't use removedir() on a file: %(path)s")
                 raise ResourceNotFoundError(path)
-
+            
             elif self.listdir(path):
                 raise DirectoryNotEmptyError(path)
             raise
         if recursive:
             try:
-                if dirname(path) not in ('', '/'):
-                    self.removedir(dirname(path),recursive=True)
+                self.removedir(dirname(path),recursive=True)
             except DirectoryNotEmptyError:
                 pass
 
@@ -566,7 +508,7 @@ class SFTPFS(FS):
         try:
             self.client.rename(nsrc,ndst)
         except IOError, e:
-            if getattr(e,"errno",None) == ENOENT:
+            if getattr(e,"errno",None) == 2:
                 raise ResourceNotFoundError(src)
             if not self.isdir(dirname(dst)):
                 raise ParentDirectoryMissingError(dst)
@@ -582,7 +524,7 @@ class SFTPFS(FS):
         try:
             self.client.rename(nsrc,ndst)
         except IOError, e:
-            if getattr(e,"errno",None) == ENOENT:
+            if getattr(e,"errno",None) == 2:
                 raise ResourceNotFoundError(src)
             if self.exists(dst):
                 raise DestinationExistsError(dst)
@@ -600,7 +542,7 @@ class SFTPFS(FS):
         try:
             self.client.rename(nsrc,ndst)
         except IOError, e:
-            if getattr(e,"errno",None) == ENOENT:
+            if getattr(e,"errno",None) == 2:
                 raise ResourceNotFoundError(src)
             if self.exists(dst):
                 raise DestinationExistsError(dst)
@@ -612,7 +554,7 @@ class SFTPFS(FS):
     @classmethod
     def _extract_info(cls, stats):
         fromtimestamp = datetime.datetime.fromtimestamp
-        info = dict((k, v) for k, v in stats.iteritems() if k in cls._info_vars and not k.startswith('_'))
+        info = dict((k, v) for k, v in stats.iteritems() if k in cls._info_vars and not k.startswith('_'))        
         info['size'] = info['st_size']
         ct = info.get('st_ctime')
         if ct is not None:
@@ -627,10 +569,10 @@ class SFTPFS(FS):
 
     @synchronize
     @convert_os_errors
-    def getinfo(self, path):
+    def getinfo(self, path):        
         npath = self._normpath(path)
         stats = self.client.stat(npath)
-        info = dict((k, getattr(stats, k)) for k in dir(stats) if not k.startswith('_'))
+        info = dict((k, getattr(stats, k)) for k in dir(stats) if not k.startswith('_'))        
         info['size'] = info['st_size']
         ct = info.get('st_ctime', None)
         if ct is not None:

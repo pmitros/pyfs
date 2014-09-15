@@ -15,23 +15,26 @@ implementations of this interface such as:
 
 """
 
-__version__ = "0.5.0"
+__version__ = "0.4.0"
 __author__ = "Will McGugan (will@willmcgugan.com)"
 
+# No longer necessary - WM
+#from base import *
+
 #  provide these by default so people can use 'fs.path.basename' etc.
-from fs import errors
-from fs import path
+import errors
+import path
 
 _thread_synchronize_default = True
 def set_thread_synchronize_default(sync):
     """Sets the default thread synchronisation flag.
-
+    
     FS objects are made thread-safe through the use of a per-FS threading Lock
     object. Since this can introduce an small overhead it can be disabled with
     this function if the code is single-threaded.
-
+    
     :param sync: Set whether to use thread synchronisation for new FS objects
-
+    
     """
     global _thread_synchronization_default
     _thread_synchronization_default = sync

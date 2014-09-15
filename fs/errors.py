@@ -11,8 +11,6 @@ catch-all exception.
 __all__ = ['FSError',
            'CreateFailedError',
            'PathError',
-           'InvalidPathError',
-           'InvalidCharsInPathError',
            'OperationFailedError',
            'UnsupportedError',
            'RemoteConnectionError',
@@ -20,26 +18,23 @@ __all__ = ['FSError',
            'PermissionDeniedError',
            'FSClosedError',
            'OperationTimeoutError',
-           'RemoveRootError',
            'ResourceError',
            'NoSysPathError',
            'NoMetaError',
            'NoPathURLError',
            'ResourceNotFoundError',
-           'ResourceInvalidError',
+           'ResourceInvalidError',           
            'DestinationExistsError',
            'DirectoryNotEmptyError',
            'ParentDirectoryMissingError',
            'ResourceLockedError',
            'NoMMapError',
-           'BackReferenceError',
            'convert_fs_errors',
-           'convert_os_errors',
+           'convert_os_errors'
            ]
 
 import sys
 import errno
-import six
 
 from fs.path import *
 from fs.local_functools import wraps
@@ -64,15 +59,11 @@ class FSError(Exception):
         return str(self.msg % keys)
 
     def __unicode__(self):
-        keys = {}
-        for k,v in self.__dict__.iteritems():
-            if isinstance(v, six.binary_type):
-                v = v.decode(sys.getfilesystemencoding(), 'replace')
-            keys[k] = v
-        return unicode(self.msg, encoding=sys.getfilesystemencoding(), errors='replace') % keys
+        return unicode(self.msg) % self.__dict__
 
     def __reduce__(self):
         return (self.__class__,(),self.__dict__.copy(),)
+
 
 
 class CreateFailedError(FSError):
@@ -88,17 +79,7 @@ class PathError(FSError):
     def __init__(self,path="",**kwds):
         self.path = path
         super(PathError,self).__init__(**kwds)
-
-
-class InvalidPathError(PathError):
-    """Base exception for fs paths that can't be mapped on to the underlaying filesystem."""
-    default_message = "Path is invalid on this filesystem %(path)s"
-
-
-class InvalidCharsInPathError(InvalidPathError):
-    """The path contains characters that are invalid on this filesystem"""
-    default_message = "Path contains invalid characters: %(path)s"
-
+ 
 
 class OperationFailedError(FSError):
     """Base exception class for errors associated with a specific operation."""
@@ -136,10 +117,6 @@ class FSClosedError(OperationFailedError):
 
 class OperationTimeoutError(OperationFailedError):
     default_message = "Unable to %(opname)s: operation timed out"
-
-
-class RemoveRootError(OperationFailedError):
-    default_message = "Can't remove root dir"
 
 
 class ResourceError(FSError):
@@ -201,14 +178,9 @@ class ResourceLockedError(ResourceError):
     """Exception raised when a resource can't be used because it is locked."""
     default_message = "Resource is locked: %(path)s"
 
-
 class NoMMapError(ResourceError):
     """Exception raise when getmmap fails to create a mmap"""
     default_message = "Can't get mmap for %(path)s"
-
-
-class BackReferenceError(ValueError):
-    """Exception raised when too many backrefs exist in a path (ex: '/..', '/docs/../..')."""
 
 
 def convert_fs_errors(func):
@@ -265,10 +237,6 @@ def convert_os_errors(func):
             if not hasattr(e,"errno") or not e.errno:
                 raise OperationFailedError(opname,details=e),None,tb
             if e.errno == errno.ENOENT:
-                raise ResourceNotFoundError(path,opname=opname,details=e),None,tb
-            if e.errno == errno.EFAULT:
-                # This can happen when listdir a directory that is deleted by another thread
-                # Best to interpret it as a resource not found
                 raise ResourceNotFoundError(path,opname=opname,details=e),None,tb
             if e.errno == errno.ESRCH:
                 raise ResourceNotFoundError(path,opname=opname,details=e),None,tb

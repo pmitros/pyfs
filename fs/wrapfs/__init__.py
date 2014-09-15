@@ -18,7 +18,6 @@ standard unix shell functionality of hiding dot-files in directory listings.
 import re
 import sys
 import fnmatch
-import threading
 
 from fs.base import FS, threading, synchronize, NoDefaultMeta
 from fs.errors import *
@@ -49,7 +48,7 @@ class WrapFS(FS):
     and/or contents of files in an FS.  It could be used to implement
     e.g. compression or encryption in a relatively painless manner.
 
-    The following methods can be overridden to control how files are
+    The following methods can be overridden to control how files are 
     accessed in the underlying FS object:
 
      * _file_wrap(file, mode):  called for each file that is opened from
@@ -66,11 +65,11 @@ class WrapFS(FS):
     """
 
     def __init__(self, fs):
-        super(WrapFS, self).__init__()
+        super(WrapFS,self).__init__()
         try:
             self._lock = fs._lock
         except (AttributeError,FSError):
-            self._lock = self._lock = threading.RLock()
+            self._lock = None
         self.wrapped_fs = fs
 
     def _file_wrap(self, f, mode):
@@ -116,59 +115,54 @@ class WrapFS(FS):
         transparent file compression - in this case files from the wrapped
         FS cannot be opened in append mode.
         """
-        return (mode, mode)
+        return (mode,mode)
 
     def __unicode__(self):
         return u"<%s: %s>" % (self.__class__.__name__,self.wrapped_fs,)
 
-    #def __str__(self):
-    #    return unicode(self).encode(sys.getdefaultencoding(),"replace")
+    def __str__(self):
+        return unicode(self).encode(sys.getdefaultencoding(),"replace")
 
 
     @rewrite_errors
     def getmeta(self, meta_name, default=NoDefaultMeta):
         return self.wrapped_fs.getmeta(meta_name, default)
-
+    
     @rewrite_errors
     def hasmeta(self, meta_name):
         return self.wrapped_fs.hasmeta(meta_name)
 
     @rewrite_errors
-    def validatepath(self, path):
-        return self.wrapped_fs.validatepath(self._encode(path))
-
-    @rewrite_errors
     def getsyspath(self, path, allow_none=False):
-        return self.wrapped_fs.getsyspath(self._encode(path), allow_none)
+        return self.wrapped_fs.getsyspath(self._encode(path),allow_none)
 
     @rewrite_errors
     def getpathurl(self, path, allow_none=False):
-        return self.wrapped_fs.getpathurl(self._encode(path), allow_none)
+        return self.wrapped_fs.getpathurl(self._encode(path),allow_none)
 
     @rewrite_errors
     def hassyspath(self, path):
         return self.wrapped_fs.hassyspath(self._encode(path))
 
     @rewrite_errors
-    def open(self, path, mode='r', **kwargs):
+    def open(self, path, mode="r", **kwargs):
         (mode, wmode) = self._adjust_mode(mode)
         f = self.wrapped_fs.open(self._encode(path), wmode, **kwargs)
         return self._file_wrap(f, mode)
 
     @rewrite_errors
-    def setcontents(self, path, data, encoding=None, errors=None, chunk_size=64*1024):
+    def setcontents(self, path, data, chunk_size=64*1024):
         #  We can't pass setcontents() through to the wrapped FS if the
-        #  wrapper has defined a _file_wrap method, as it would bypass
+        #  wrapper has defined a _file_wrap method, as it would bypass 
         #  the file contents wrapping.
-        #if self._file_wrap.im_func is WrapFS._file_wrap.im_func:
-        if getattr(self.__class__, '_file_wrap', None) is getattr(WrapFS, '_file_wrap', None):
-            return self.wrapped_fs.setcontents(self._encode(path), data, encoding=encoding, errors=errors, chunk_size=chunk_size)
+        if self._file_wrap.im_func is WrapFS._file_wrap.im_func:
+            return self.wrapped_fs.setcontents(self._encode(path), data, chunk_size=chunk_size)
         else:
-            return super(WrapFS, self).setcontents(path, data, encoding=encoding, errors=errors, chunk_size=chunk_size)
+            return super(WrapFS,self).setcontents(path, data, chunk_size)
 
     @rewrite_errors
-    def createfile(self, path, wipe=False):
-        return self.wrapped_fs.createfile(self._encode(path), wipe=wipe)
+    def createfile(self, path):
+        return self.wrapped_fs.createfile(self._encode(path))
 
     @rewrite_errors
     def exists(self, path):
@@ -188,7 +182,7 @@ class WrapFS(FS):
                     full=full,
                     absolute=absolute,
                     dirs_only=dirs_only,
-                    files_only=files_only)
+                    files_only=files_only)        
         full = kwds.pop("full",False)
         absolute = kwds.pop("absolute",False)
         wildcard = kwds.pop("wildcard",None)
@@ -196,18 +190,18 @@ class WrapFS(FS):
             wildcard = lambda fn:True
         elif not callable(wildcard):
             wildcard_re = re.compile(fnmatch.translate(wildcard))
-            wildcard = lambda fn:bool (wildcard_re.match(fn))
+            wildcard = lambda fn:bool (wildcard_re.match(fn))         
         entries = []
         enc_path = self._encode(path)
         for e in self.wrapped_fs.listdir(enc_path,**kwds):
-            e = basename(self._decode(pathcombine(enc_path,e)))
+            e = basename(self._decode(pathjoin(enc_path,e)))
             if not wildcard(e):
                 continue
             if full:
-                e = pathcombine(path,e)
+                e = pathjoin(path,e)
             elif absolute:
-                e = abspath(pathcombine(path,e))
-            entries.append(e)
+                e = abspath(pathjoin(path,e))
+            entries.append(e) 
         return entries
 
     @rewrite_errors
@@ -216,7 +210,7 @@ class WrapFS(FS):
                     full=full,
                     absolute=absolute,
                     dirs_only=dirs_only,
-                    files_only=files_only)
+                    files_only=files_only)        
         full = kwds.pop("full",False)
         absolute = kwds.pop("absolute",False)
         wildcard = kwds.pop("wildcard",None)
@@ -224,16 +218,16 @@ class WrapFS(FS):
             wildcard = lambda fn:True
         elif not callable(wildcard):
             wildcard_re = re.compile(fnmatch.translate(wildcard))
-            wildcard = lambda fn:bool (wildcard_re.match(fn))
+            wildcard = lambda fn:bool (wildcard_re.match(fn))         
         enc_path = self._encode(path)
         for e in self.wrapped_fs.ilistdir(enc_path,**kwds):
-            e = basename(self._decode(pathcombine(enc_path,e)))
+            e = basename(self._decode(pathjoin(enc_path,e)))
             if not wildcard(e):
                 continue
             if full:
-                e = pathcombine(path,e)
+                e = pathjoin(path,e)
             elif absolute:
-                e = abspath(pathcombine(path,e))
+                e = abspath(pathjoin(path,e))
             yield e
 
     @rewrite_errors
@@ -242,7 +236,7 @@ class WrapFS(FS):
                     full=full,
                     absolute=absolute,
                     dirs_only=dirs_only,
-                    files_only=files_only)
+                    files_only=files_only)        
         full = kwds.pop("full",False)
         absolute = kwds.pop("absolute",False)
         wildcard = kwds.pop("wildcard",None)
@@ -250,17 +244,17 @@ class WrapFS(FS):
             wildcard = lambda fn:True
         elif not callable(wildcard):
             wildcard_re = re.compile(fnmatch.translate(wildcard))
-            wildcard = lambda fn:bool (wildcard_re.match(fn))
+            wildcard = lambda fn:bool (wildcard_re.match(fn))         
         entries = []
         enc_path = self._encode(path)
         for (nm,info) in self.wrapped_fs.listdirinfo(enc_path,**kwds):
-            nm = basename(self._decode(pathcombine(enc_path,nm)))
+            nm = basename(self._decode(pathjoin(enc_path,nm)))
             if not wildcard(nm):
                 continue
             if full:
-                nm = pathcombine(path,nm)
+                nm = pathjoin(path,nm)
             elif absolute:
-                nm = abspath(pathcombine(path,nm))
+                nm = abspath(pathjoin(path,nm))
             entries.append((nm,info))
         return entries
 
@@ -278,16 +272,16 @@ class WrapFS(FS):
             wildcard = lambda fn:True
         elif not callable(wildcard):
             wildcard_re = re.compile(fnmatch.translate(wildcard))
-            wildcard = lambda fn:bool (wildcard_re.match(fn))
+            wildcard = lambda fn:bool (wildcard_re.match(fn))         
         enc_path = self._encode(path)
         for (nm,info) in self.wrapped_fs.ilistdirinfo(enc_path,**kwds):
-            nm = basename(self._decode(pathcombine(enc_path,nm)))
+            nm = basename(self._decode(pathjoin(enc_path,nm)))
             if not wildcard(nm):
                 continue
             if full:
-                nm = pathcombine(path,nm)
+                nm = pathjoin(path,nm)
             elif absolute:
-                nm = abspath(pathcombine(path,nm))
+                nm = abspath(pathjoin(path,nm))
             yield (nm,info)
 
     @rewrite_errors
@@ -303,9 +297,9 @@ class WrapFS(FS):
         else:
             if wildcard is not None and not callable(wildcard):
                 wildcard_re = re.compile(fnmatch.translate(wildcard))
-                wildcard = lambda fn:bool (wildcard_re.match(fn))
+                wildcard = lambda fn:bool (wildcard_re.match(fn))         
             for (dirpath,filepaths) in self.wrapped_fs.walk(self._encode(path),search=search,ignore_errors=ignore_errors):
-                filepaths = [basename(self._decode(pathcombine(dirpath,p)))
+                filepaths = [basename(self._decode(pathjoin(dirpath,p)))
                                  for p in filepaths]
                 dirpath = abspath(self._decode(dirpath))
                 if wildcard is not None:
@@ -325,7 +319,7 @@ class WrapFS(FS):
         else:
             if wildcard is not None and not callable(wildcard):
                 wildcard_re = re.compile(fnmatch.translate(wildcard))
-                wildcard = lambda fn:bool (wildcard_re.match(fn))
+                wildcard = lambda fn:bool (wildcard_re.match(fn))         
             for filepath in self.wrapped_fs.walkfiles(self._encode(path),search=search,ignore_errors=ignore_errors):
                 filepath = abspath(self._decode(filepath))
                 if wildcard is not None:
@@ -436,7 +430,6 @@ class WrapFS(FS):
         if not self.closed:
             self.wrapped_fs.close()
             super(WrapFS,self).close()
-            self.wrapped_fs = None
 
 
 def wrap_fs_methods(decorator, cls=None, exclude=[]):
@@ -473,7 +466,7 @@ def wrap_fs_methods(decorator, cls=None, exclude=[]):
 wrap_fs_methods.method_names = ["open","exists","isdir","isfile","listdir",
     "makedir","remove","setcontents","removedir","rename","getinfo","copy",
     "move","copydir","movedir","close","getxattr","setxattr","delxattr",
-    "listxattrs","validatepath","getsyspath","createfile", "hasmeta", "getmeta","listdirinfo",
+    "listxattrs","getsyspath","createfile", "hasmeta", "getmeta","listdirinfo",
     "ilistdir","ilistdirinfo"]
 
 

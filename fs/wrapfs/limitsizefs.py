@@ -58,20 +58,14 @@ class LimitSizeFS(WrapFS):
             raise NoSysPathError(path)
         return None
 
-    def open(self, path, mode='r', buffering=-1, encoding=None, errors=None, newline=None, line_buffering=False, **kwargs):
+    def open(self, path, mode="r"):
         path = relpath(normpath(path))
         with self._size_lock:
             try:
                 size = self.getsize(path)
             except ResourceNotFoundError:
                 size = 0
-            f = super(LimitSizeFS,self).open(path,
-                                             mode=mode,
-                                             buffering=buffering,
-                                             errors=errors,
-                                             newline=newline,
-                                             line_buffering=line_buffering,
-                                             **kwargs)
+            f = super(LimitSizeFS,self).open(path,mode)
             if "w" not in mode:
                 self._set_file_size(path,None,1)
             else:
@@ -98,12 +92,12 @@ class LimitSizeFS(WrapFS):
         else:
             self._file_sizes[path] = (size,count)
 
-    def setcontents(self, path, data, chunk_size=64*1024):
+    def setcontents(self, path, data, chunk_size=64*1024):            
         f = None
-        try:
-            f = self.open(path, 'wb')
+        try:                
+            f = self.open(path, 'w')
             if hasattr(data, 'read'):
-                chunk = data.read(chunk_size)
+                chunk = data.read(chunk_size)            
                 while chunk:
                     f.write(chunk)
                     chunk = data.read(chunk_size)
@@ -112,7 +106,7 @@ class LimitSizeFS(WrapFS):
         finally:
             if f is not None:
                 f.close()
-
+    
     def _file_closed(self, path):
         self._set_file_size(path,None,-1)
 
@@ -141,7 +135,7 @@ class LimitSizeFS(WrapFS):
                 return cur_size
 
     #  We force use of several base FS methods,
-    #  since they will fall back to writing out each file
+    #  since they will fall back to writing out each file 
     #  and thus will route through our size checking logic.
     def copy(self, src, dst, **kwds):
         FS.copy(self,src,dst,**kwds)
@@ -239,7 +233,7 @@ class LimitSizeFile(FileWrapper):
         self.fs = fs
         self.path = path
         self._lock = fs._lock
-
+    
     @synchronize
     def _write(self, data, flushing=False):
         pos = self.wrapped_file.tell()

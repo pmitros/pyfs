@@ -66,15 +66,8 @@ from fs.errors import *
 from fs.path import *
 from fs.local_functools import wraps
 
-from six import PY3
-from six import b
-
 try:
-    if PY3:
-        from fs.expose.fuse import fuse_ctypes as fuse
-    else:
-        from fs.expose.fuse import fuse3 as fuse
-
+    import fuse_ctypes as fuse
 except NotImplementedError:
     raise ImportError("FUSE found but not usable")
 try:
@@ -101,7 +94,7 @@ def handle_fs_errors(func):
     name = func.__name__
     func = convert_fs_errors(func)
     @wraps(func)
-    def wrapper(*args,**kwds):
+    def wrapper(*args,**kwds):        
         #logger.debug("CALL %r %s",name,repr(args))
         try:
             res = func(*args,**kwds)
@@ -114,6 +107,7 @@ def handle_fs_errors(func):
                 return 0
         return res
     return wrapper
+ 
 
 
 class FSOperations(Operations):
@@ -158,7 +152,7 @@ class FSOperations(Operations):
             (f,path,lock) = self._files_by_handle.pop(fh.fh)
             del self._files_size_written[path][fh.fh]
             if not self._files_size_written[path]:
-                del self._files_size_written[path]
+                del self._files_size_written[path] 
         finally:
             self._files_lock.release()
 
@@ -169,11 +163,11 @@ class FSOperations(Operations):
     def destroy(self, data):
         if self._on_destroy:
             self._on_destroy()
-
+    
     @handle_fs_errors
     def chmod(self, path, mode):
         raise UnsupportedError("chmod")
-
+    
     @handle_fs_errors
     def chown(self, path, uid, gid):
         raise UnsupportedError("chown")
@@ -184,14 +178,13 @@ class FSOperations(Operations):
         # FUSE doesn't seem to pass correct mode information here - at least,
         # I haven't figured out how to distinguish between "w" and "w+".
         # Go with the most permissive option.
-        mode = flags_to_mode(fi.flags)
-        fh = self._reg_file(self.fs.open(path, mode), path)
+        fh = self._reg_file(self.fs.open(path,"w+"),path)
         fi.fh = fh
         fi.keep_cache = 0
 
     @handle_fs_errors
     def flush(self, path, fh):
-        (file, _, lock) = self._get_file(fh)
+        (file,_,lock) = self._get_file(fh)
         lock.acquire()
         try:
             file.flush()
@@ -200,7 +193,7 @@ class FSOperations(Operations):
 
     @handle_fs_errors
     def getattr(self, path, fh=None):
-        attrs = self._get_stat_dict(path.decode(NATIVE_ENCODING))
+        attrs = self._get_stat_dict(path.decode(NATIVE_ENCODING))            
         return attrs
 
     @handle_fs_errors
@@ -208,12 +201,12 @@ class FSOperations(Operations):
         path = path.decode(NATIVE_ENCODING)
         name = name.decode(NATIVE_ENCODING)
         try:
-            value = self.fs.getxattr(path, name)
+            value = self.fs.getxattr(path,name)
         except AttributeError:
-            raise UnsupportedError("getxattr")
+            raise OSError(errno.ENODATA,"no attribute '%s'" % (name,))
         else:
             if value is None:
-                raise OSError(errno.ENODATA, "no attribute '%s'" % (name,))
+                raise OSError(errno.ENODATA,"no attribute '%s'" % (name,))
             return value
 
     @handle_fs_errors
@@ -226,13 +219,13 @@ class FSOperations(Operations):
         try:
             return self.fs.listxattrs(path)
         except AttributeError:
-            raise UnsupportedError("listxattrs")
+            return []
 
     @handle_fs_errors
     def mkdir(self, path, mode):
         path = path.decode(NATIVE_ENCODING)
         try:
-            self.fs.makedir(path, recursive=True)
+            self.fs.makedir(path,mode)
         except TypeError:
             self.fs.makedir(path)
 
@@ -244,13 +237,13 @@ class FSOperations(Operations):
     def open(self, path, fi):
         path = path.decode(NATIVE_ENCODING)
         mode = flags_to_mode(fi.flags)
-        fi.fh = self._reg_file(self.fs.open(path, mode), path)
+        fi.fh = self._reg_file(self.fs.open(path,mode),path)
         fi.keep_cache = 0
         return 0
 
     @handle_fs_errors
     def read(self, path, size, offset, fh):
-        (file, _, lock) = self._get_file(fh)
+        (file,_,lock) = self._get_file(fh)
         lock.acquire()
         try:
             file.seek(offset)
@@ -262,10 +255,10 @@ class FSOperations(Operations):
     @handle_fs_errors
     def readdir(self, path, fh=None):
         path = path.decode(NATIVE_ENCODING)
-        entries = ['.', '..']
-        for (nm, info) in self.fs.listdirinfo(path):
-            self._fill_stat_dict(pathjoin(path, nm), info)
-            entries.append((nm.encode(NATIVE_ENCODING), info, 0))
+        entries = ['.', '..']        
+        for (nm,info) in self.fs.listdirinfo(path):            
+            self._fill_stat_dict(pathjoin(path,nm),info)
+            entries.append((nm.encode(NATIVE_ENCODING),info,0))              
         return entries
 
     @handle_fs_errors
@@ -274,7 +267,7 @@ class FSOperations(Operations):
 
     @handle_fs_errors
     def release(self, path, fh):
-        (file, _, lock) = self._get_file(fh)
+        (file,_,lock) = self._get_file(fh)
         lock.acquire()
         try:
             file.close()
@@ -287,7 +280,7 @@ class FSOperations(Operations):
         path = path.decode(NATIVE_ENCODING)
         name = name.decode(NATIVE_ENCODING)
         try:
-            return self.fs.delxattr(path, name)
+            return self.fs.delxattr(path,name)
         except AttributeError:
             raise UnsupportedError("removexattr")
 
@@ -296,12 +289,12 @@ class FSOperations(Operations):
         old = old.decode(NATIVE_ENCODING)
         new = new.decode(NATIVE_ENCODING)
         try:
-            self.fs.rename(old, new)
+            self.fs.rename(old,new)
         except FSError:
             if self.fs.isdir(old):
-                self.fs.movedir(old, new)
+                self.fs.movedir(old,new)
             else:
-                self.fs.move(old, new)
+                self.fs.move(old,new)
 
     @handle_fs_errors
     def rmdir(self, path):
@@ -313,7 +306,7 @@ class FSOperations(Operations):
         path = path.decode(NATIVE_ENCODING)
         name = name.decode(NATIVE_ENCODING)
         try:
-            return self.fs.setxattr(path, name, value)
+            return self.fs.setxattr(path,name,value)
         except AttributeError:
             raise UnsupportedError("setxattr")
 
@@ -325,18 +318,18 @@ class FSOperations(Operations):
     def truncate(self, path, length, fh=None):
         path = path.decode(NATIVE_ENCODING)
         if fh is None and length == 0:
-            self.fs.open(path, "wb").close()
+            self.fs.open(path,"w").close()
         else:
             if fh is None:
-                f = self.fs.open(path, "rb+")
-                if not hasattr(f, "truncate"):
+                f = self.fs.open(path,"r+")
+                if not hasattr(f,"truncate"):
                     raise UnsupportedError("truncate")
                 f.truncate(length)
             else:
-                (file, _, lock) = self._get_file(fh)
+                (file,_,lock) = self._get_file(fh)
                 lock.acquire()
                 try:
-                    if not hasattr(file, "truncate"):
+                    if not hasattr(file,"truncate"):
                         raise UnsupportedError("truncate")
                     file.truncate(length)
                 finally:
@@ -359,18 +352,17 @@ class FSOperations(Operations):
         self.fs.remove(path)
 
     @handle_fs_errors
-    def utimens(self, path, times=None):
-        path = path.decode(NATIVE_ENCODING)
+    def utimens(self, path, times=None):        
         accessed_time, modified_time = times
         if accessed_time is not None:
             accessed_time = datetime.datetime.fromtimestamp(accessed_time)
         if modified_time is not None:
             modified_time = datetime.datetime.fromtimestamp(modified_time)
-        self.fs.settimes(path, accessed_time, modified_time)
+        self.fs.settimes(path, accessed_time, modified_time)         
 
     @handle_fs_errors
     def write(self, path, data, offset, fh):
-        (file, path, lock) = self._get_file(fh)
+        (file,path,lock) = self._get_file(fh)
         lock.acquire()
         try:
             file.seek(offset)
@@ -384,7 +376,7 @@ class FSOperations(Operations):
     def _get_stat_dict(self, path):
         """Build a 'stat' dictionary for the given file."""
         info = self.fs.getinfo(path)
-        self._fill_stat_dict(path, info)
+        self._fill_stat_dict(path,info)
         return info
 
     def _fill_stat_dict(self, path, info):
@@ -394,28 +386,28 @@ class FSOperations(Operations):
         for k in private_keys:
             del info[k]
         #  Basic stuff that is constant for all paths
-        info.setdefault("st_ino", 0)
-        info.setdefault("st_dev", 0)
-        info.setdefault("st_uid", uid)
-        info.setdefault("st_gid", gid)
-        info.setdefault("st_rdev", 0)
-        info.setdefault("st_blksize", 1024)
-        info.setdefault("st_blocks", 1)
+        info.setdefault("st_ino",0)
+        info.setdefault("st_dev",0)
+        info.setdefault("st_uid",uid)
+        info.setdefault("st_gid",gid)
+        info.setdefault("st_rdev",0)
+        info.setdefault("st_blksize",1024)
+        info.setdefault("st_blocks",1)
         #  The interesting stuff
         if 'st_mode' not in info:
             if self.fs.isdir(path):
                 info['st_mode'] = 0755
             else:
-                info['st_mode'] = 0666
-        mode = info['st_mode']
+                info['st_mode'] = 0666 
+        mode = info['st_mode']       
         if not statinfo.S_ISDIR(mode) and not statinfo.S_ISREG(mode):
             if self.fs.isdir(path):
                 info["st_mode"] = mode | statinfo.S_IFDIR
-                info.setdefault("st_nlink", 2)
+                info.setdefault("st_nlink",2)
             else:
                 info["st_mode"] = mode | statinfo.S_IFREG
-                info.setdefault("st_nlink", 1)
-        for (key1, key2) in [("st_atime", "accessed_time"), ("st_mtime", "modified_time"), ("st_ctime", "created_time")]:
+                info.setdefault("st_nlink",1)
+        for (key1,key2) in [("st_atime","accessed_time"),("st_mtime","modified_time"),("st_ctime","created_time")]:
             if key1 not in info:
                 if key2 in info:
                     info[key1] = time.mktime(info[key2].timetuple())
@@ -466,7 +458,6 @@ def mount(fs, path, foreground=False, ready_callback=None, unmount_callback=None
             ready_callback()
         if unmount_callback:
             orig_unmount = mp.unmount
-
             def new_unmount():
                 orig_unmount()
                 unmount_callback()
@@ -480,22 +471,10 @@ def unmount(path):
     This function shells out to the 'fusermount' program to unmount a
     FUSE filesystem.  It works, but it would probably be better to use the
     'unmount' method on the MountProcess class if you have it.
-
-    On darwin, "diskutil umount <path>" is called
-    On freebsd, "umount <path>" is called
     """
-    if sys.platform == "darwin":
-        args = ["diskutil", "umount", path]
-    elif "freebsd" in sys.platform:
-        args = ["umount", path]
-    else:
-        args = ["fusermount", "-u", path]
-
     for num_tries in xrange(3):
-        p = subprocess.Popen(args,
-                             stderr=subprocess.PIPE,
-                             stdout=subprocess.PIPE)
-        (stdout, stderr) = p.communicate()
+        p = subprocess.Popen(["fusermount","-u",path],stderr=subprocess.PIPE)
+        (stdout,stderr) = p.communicate()
         if p.returncode == 0:
             return
         if "not mounted" in stderr:
@@ -545,40 +524,27 @@ class MountProcess(subprocess.Popen):
 
     def __init__(self, fs, path, fuse_opts={}, nowait=False, **kwds):
         self.path = path
-        if nowait or kwds.get("close_fds", False):
-            if PY3:
-                cmd = "from pickle import loads;"
-            else:
-                cmd = "from cPickle import loads;"
-            #cmd = 'import cPickle; '
-            cmd = cmd + 'data = loads(%s); '
+        if nowait or kwds.get("close_fds",False):
+            cmd = 'import cPickle; '
+            cmd = cmd + 'data = cPickle.loads(%s); '
             cmd = cmd + 'from fs.expose.fuse import MountProcess; '
             cmd = cmd + 'MountProcess._do_mount_nowait(data)'
-            cmd = cmd % (repr(cPickle.dumps((fs, path, fuse_opts), -1)),)
-            cmd = [sys.executable, "-c", cmd]
-            super(MountProcess, self).__init__(cmd, **kwds)
+            cmd = cmd % (repr(cPickle.dumps((fs,path,fuse_opts),-1)),)
+            cmd = [sys.executable,"-c",cmd]
+            super(MountProcess,self).__init__(cmd,**kwds)
         else:
-            (r, w) = os.pipe()
-            if PY3:
-                cmd = "from pickle import loads;"
-            else:
-                cmd = "from cPickle import loads;"
-            #cmd = 'import cPickle; '
-            cmd = cmd + 'data = loads(%s); '
+            (r,w) = os.pipe()
+            cmd = 'import cPickle; '
+            cmd = cmd + 'data = cPickle.loads(%s); '
             cmd = cmd + 'from fs.expose.fuse import MountProcess; '
             cmd = cmd + 'MountProcess._do_mount_wait(data)'
-            cmd = cmd % (repr(cPickle.dumps((fs, path, fuse_opts, r, w), -1)),)
-            cmd = [sys.executable, "-c", cmd]
-            super(MountProcess, self).__init__(cmd, **kwds)
+            cmd = cmd % (repr(cPickle.dumps((fs,path,fuse_opts,r,w),-1)),)
+            cmd = [sys.executable,"-c",cmd]
+            super(MountProcess,self).__init__(cmd,**kwds)
             os.close(w)
-
-            byte = os.read(r, 1)
-            if byte != b("S"):
-                err_text = os.read(r, 20)
+            if os.read(r,1) != "S":
                 self.terminate()
-                if hasattr(err_text, 'decode'):
-                    err_text = err_text.decode(NATIVE_ENCODING)
-                raise RuntimeError("FUSE error: " + err_text)
+                raise RuntimeError("FUSE error: " + os.read(r,20))
 
     def unmount(self):
         """Cleanly unmount the FUSE filesystem, terminating this subprocess."""
@@ -590,7 +556,7 @@ class MountProcess(subprocess.Popen):
                 unmount(self.path)
             except OSError:
                 pass
-        tmr = threading.Timer(self.unmount_timeout, killme)
+        tmr = threading.Timer(self.unmount_timeout,killme)
         tmr.start()
         self.wait()
         tmr.cancel()
@@ -598,60 +564,56 @@ class MountProcess(subprocess.Popen):
     if not hasattr(subprocess.Popen, "terminate"):
         def terminate(self):
             """Gracefully terminate the subprocess."""
-            os.kill(self.pid, signal.SIGTERM)
+            os.kill(self.pid,signal.SIGTERM)
 
     if not hasattr(subprocess.Popen, "kill"):
         def kill(self):
             """Forcibly terminate the subprocess."""
-            os.kill(self.pid, signal.SIGKILL)
+            os.kill(self.pid,signal.SIGKILL)
 
     @staticmethod
     def _do_mount_nowait(data):
         """Perform the specified mount, return without waiting."""
-        fs, path, opts = data
+        (fs,path,opts) = data
         opts["foreground"] = True
-
         def unmount_callback():
             fs.close()
         opts["unmount_callback"] = unmount_callback
-        mount(fs, path, *opts)
+        mount(fs,path,*opts)
 
     @staticmethod
     def _do_mount_wait(data):
         """Perform the specified mount, signalling when ready."""
-        fs, path, opts, r, w = data
+        (fs,path,opts,r,w) = data
         os.close(r)
         opts["foreground"] = True
         successful = []
-
         def ready_callback():
             successful.append(True)
-            os.write(w, b("S"))
+            os.write(w,"S")
             os.close(w)
         opts["ready_callback"] = ready_callback
-
         def unmount_callback():
             fs.close()
         opts["unmount_callback"] = unmount_callback
         try:
-            mount(fs, path, **opts)
+            mount(fs,path,**opts)
         except Exception, e:
-            os.write(w, b("E") + unicode(e).encode('ascii', errors='replace'))
+            os.write(w,"E"+str(e))
             os.close(w)
-
-        if not successful:
-            os.write(w, b("EMount unsuccessful"))
-            os.close(w)
+        else:
+            if not successful:
+                os.write(w,"E")
+                os.close(w)
 
 
 if __name__ == "__main__":
-    import os
-    import os.path
+    import os, os.path
     from fs.tempfs import TempFS
     mount_point = os.path.join(os.environ["HOME"], "fs.expose.fuse")
     if not os.path.exists(mount_point):
         os.makedirs(mount_point)
-
     def ready_callback():
         print "READY"
     mount(TempFS(), mount_point, foreground=True, ready_callback=ready_callback)
+

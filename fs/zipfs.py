@@ -13,14 +13,11 @@ from fs.base import *
 from fs.path import *
 from fs.errors import *
 from fs.filelike import StringIO
-from fs import iotools
 
 from zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED, BadZipfile, LargeZipFile
 from memoryfs import MemoryFS
 
 import tempfs
-
-from six import PY3
 
 
 class ZipOpenError(CreateFailedError):
@@ -34,6 +31,7 @@ class ZipNotFoundError(CreateFailedError):
 
 
 class _TempWriteFile(object):
+
     """Proxies a file object and calls a callback when the file is closed."""
 
     def __init__(self, fs, filename, close_callback):
@@ -51,21 +49,13 @@ class _TempWriteFile(object):
     def close(self):
         self._file.close()
         self.close_callback(self.filename)
-
+        
     def flush(self):
         self._file.flush()
 
-    def seek(self, offset, whence):
-        return self._file.seek(offset, whence)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.close()
-
 
 class _ExceptionProxy(object):
+
     """A placeholder for an object that may no longer be used."""
 
     def __getattr__(self, name):
@@ -79,15 +69,16 @@ class _ExceptionProxy(object):
 
 
 class ZipFS(FS):
-    """A FileSystem that represents a zip file."""
 
-    _meta = {'thread_safe': True,
-             'virtual': False,
-             'read_only': False,
-             'unicode_paths': True,
-             'case_insensitive_paths': False,
-             'network': False,
-             'atomic.setcontents': False
+    """A FileSystem that represents a zip file."""
+    
+    _meta = { 'thread_safe' : True,
+              'virtual' : False,
+              'read_only' : False,
+              'unicode_paths' : True,
+              'case_insensitive_paths' : False,
+              'network' : False,
+              'atomic.setcontents' : False
              }
 
     def __init__(self, zip_file, mode="r", compression="deflated", allow_zip_64=False, encoding="CP437", thread_synchronize=True):
@@ -115,27 +106,27 @@ class ZipFS(FS):
             raise ValueError("mode must be 'r', 'w' or 'a'")
 
         self.zip_mode = mode
-        self.encoding = encoding
-
+        self.encoding = encoding                
+        
         if isinstance(zip_file, basestring):
             zip_file = os.path.expanduser(os.path.expandvars(zip_file))
             zip_file = os.path.normpath(os.path.abspath(zip_file))
             self._zip_file_string = True
         else:
             self._zip_file_string = False
-
+        
         try:
             self.zf = ZipFile(zip_file, mode, compression_type, allow_zip_64)
-        except BadZipfile, bzf:
+        except BadZipfile, bzf:            
             raise ZipOpenError("Not a zip file or corrupt (%s)" % str(zip_file),
                                details=bzf)
-        except IOError, ioe:
+        except IOError, ioe:            
             if str(ioe).startswith('[Errno 22] Invalid argument'):
                 raise ZipOpenError("Not a zip file or corrupt (%s)" % str(zip_file),
                                    details=ioe)
             raise ZipNotFoundError("Zip file not found (%s)" % str(zip_file),
-                                   details=ioe)
-
+                                  details=ioe)
+                
         self.zip_path = str(zip_file)
         self.temp_fs = None
         if mode in 'wa':
@@ -144,29 +135,18 @@ class ZipFS(FS):
         self._path_fs = MemoryFS()
         if mode in 'ra':
             self._parse_resource_list()
-
-        self.read_only = mode == 'r'
+            
+        self.read_only = mode == 'r'        
 
     def __str__(self):
         return "<ZipFS: %s>" % self.zip_path
 
     def __unicode__(self):
-        return u"<ZipFS: %s>" % self.zip_path
-
-    def _decode_path(self, path):
-        if PY3:
-            return path
-        return path.decode(self.encoding)
-
-    def _encode_path(self, path):
-        if PY3:
-            return path
-        return path.encode(self.encoding)
+        return unicode(self.__str__())
 
     def _parse_resource_list(self):
         for path in self.zf.namelist():
-            #self._add_resource(path.decode(self.encoding))
-            self._add_resource(self._decode_path(path))
+            self._add_resource(path.decode(self.encoding))
 
     def _add_resource(self, path):
         if path.endswith('/'):
@@ -180,10 +160,11 @@ class ZipFS(FS):
             f = self._path_fs.open(path, 'w')
             f.close()
 
-    def getmeta(self, meta_name, default=NoDefaultMeta):
+    def getmeta(self, meta_name, default=NoDefaultMeta):        
         if meta_name == 'read_only':
             return self.read_only
         return super(ZipFS, self).getmeta(meta_name, default)
+        
 
     def close(self):
         """Finalizes the zip file so that it can be read.
@@ -194,9 +175,8 @@ class ZipFS(FS):
             self.zf = _ExceptionProxy()
 
     @synchronize
-    @iotools.filelike_to_stream
-    def open(self, path, mode='r', buffering=-1, encoding=None, errors=None, newline=None, line_buffering=False, **kwargs):
-        path = normpath(relpath(path))
+    def open(self, path, mode="r", **kwargs):        
+        path = normpath(relpath(path))        
 
         if 'r' in mode:
             if self.zip_mode not in 'ra':
@@ -205,16 +185,15 @@ class ZipFS(FS):
                                            msg="1 Zip file must be opened for reading ('r') or appending ('a')")
             try:
                 if hasattr(self.zf, 'open') and self._zip_file_string:
-                    #return self.zf.open(self._encode_path(path), "r")
-                    return self.zf.open(self._encode_path(path), 'rU' if 'U' in mode else 'r')
+                    return self.zf.open(path.encode(self.encoding))
                 else:
-                    contents = self.zf.read(self._encode_path(path))
+                    contents = self.zf.read(path.encode(self.encoding))
             except KeyError:
                 raise ResourceNotFoundError(path)
             return StringIO(contents)
 
-        if 'w' in mode:
-            if self.zip_mode not in 'wa':
+        if 'w' in mode:            
+            if self.zip_mode not in 'wa':                
                 raise OperationFailedError("open file",
                                            path=path,
                                            msg="2 Zip file must be opened for writing ('w') or appending ('a')")
@@ -224,32 +203,31 @@ class ZipFS(FS):
 
             self._add_resource(path)
             f = _TempWriteFile(self.temp_fs, path, self._on_write_close)
+
             return f
 
         raise ValueError("Mode must contain be 'r' or 'w'")
 
     @synchronize
-    def getcontents(self, path, mode="rb", encoding=None, errors=None, newline=None):
+    def getcontents(self, path):
         if not self.exists(path):
             raise ResourceNotFoundError(path)
         path = normpath(relpath(path))
         try:
-            contents = self.zf.read(self._encode_path(path))
+            contents = self.zf.read(path.encode(self.encoding))
         except KeyError:
             raise ResourceNotFoundError(path)
         except RuntimeError:
             raise OperationFailedError("read file", path=path, msg="3 Zip file must be opened with 'r' or 'a' to read")
-        if 'b' in mode:
-            return contents
-        return iotools.decode_binary(contents, encoding=encoding, errors=errors, newline=newline)
+        return contents
 
     @synchronize
     def _on_write_close(self, filename):
         sys_path = self.temp_fs.getsyspath(filename)
-        self.zf.write(sys_path, self._encode_path(filename))
+        self.zf.write(sys_path, filename.encode(self.encoding))
 
-    def desc(self, path):
-        return "%s in zip file %s" % (path, self.zip_path)
+    def desc(self, path):        
+        return "%s in zip file %s" % (path, self.zip_path)        
 
     def isdir(self, path):
         return self._path_fs.isdir(path)
@@ -278,14 +256,14 @@ class ZipFS(FS):
             raise ResourceNotFoundError(path)
         path = normpath(path).lstrip('/')
         try:
-            zi = self.zf.getinfo(self._encode_path(path))
+            zi = self.zf.getinfo(path.encode(self.encoding))
             zinfo = dict((attrib, getattr(zi, attrib)) for attrib in dir(zi) if not attrib.startswith('_'))
             for k, v in zinfo.iteritems():
                 if callable(v):
                     zinfo[k] = v()
         except KeyError:
             zinfo = {'file_size':0}
-        info = {'size' : zinfo['file_size']}
+        info = {'size' : zinfo['file_size'] }
         if 'date_time' in zinfo:
             info['created_time'] = datetime.datetime(*zinfo['date_time'])
         info.update(zinfo)

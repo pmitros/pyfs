@@ -5,14 +5,14 @@ fs.watch
 Change notification support for FS.
 
 This module defines a standard interface for FS subclasses that support change
-notification callbacks.  It also offers some WrapFS subclasses that can
+notification callbacks.  It also offers some WrapFS subclasses that can 
 simulate such an ability on top of an ordinary FS object.
 
 An FS object that wants to be "watchable" must provide the following methods:
 
   * ``add_watcher(callback,path="/",events=None,recursive=True)``
 
-      Request that the given callback be executed in response to changes
+      Request that the given callback be executed in response to changes 
       to the given path.  A specific set of change events can be specified.
       This method returns a Watcher object.
 
@@ -31,7 +31,7 @@ an iterator over the change events.
 
 import sys
 import weakref
-import threading
+import threading 
 import Queue
 import traceback
 
@@ -41,13 +41,10 @@ from fs.wrapfs import WrapFS
 from fs.base import FS
 from fs.filelike import FileWrapper
 
-from six import b
-
 
 class EVENT(object):
     """Base class for change notification events."""
     def __init__(self,fs,path):
-        super(EVENT, self).__init__()
         self.fs = fs
         if path is not None:
             path = abspath(normpath(path))
@@ -81,16 +78,15 @@ class REMOVED(EVENT):
 
 class MODIFIED(EVENT):
     """Event fired when a file or directory is modified."""
-    def __init__(self,fs,path,data_changed=False, closed=False):
+    def __init__(self,fs,path,data_changed=False):
         super(MODIFIED,self).__init__(fs,path)
         self.data_changed = data_changed
-        self.closed = closed
 
     def clone(self,fs=None,path=None,data_changed=None):
         evt = super(MODIFIED,self).clone(fs,path)
         if data_changed is None:
             data_changed = self.data_changed
-        evt.data_changed = data_changed
+        evt.data_changd = data_changed
         return evt
 
 class MOVED_DST(EVENT):
@@ -291,41 +287,34 @@ class WatchableFS(WatchableFSMixin,WrapFS):
     that might be made through other interfaces to the same filesystem.
     """
 
-    def __init__(self, *args, **kwds):
-        super(WatchableFS, self).__init__(*args, **kwds)
+    def __init__(self,*args,**kwds):
+        super(WatchableFS,self).__init__(*args,**kwds)
 
     def close(self):
-        super(WatchableFS, self).close()
+        super(WatchableFS,self).close()
         self.notify_watchers(CLOSED)
 
-    def open(self, path, mode='r', buffering=-1, encoding=None, errors=None, newline=None, line_buffering=False, **kwargs):
+    def open(self,path,mode="r",**kwargs):
         existed = self.wrapped_fs.isfile(path)
-        f = super(WatchableFS, self).open(path,
-                                          mode=mode,
-                                          buffering=buffering,
-                                          encoding=encoding,
-                                          errors=errors,
-                                          newline=newline,
-                                          line_buffering=line_buffering,
-                                          **kwargs)
+        f = super(WatchableFS,self).open(path,mode,**kwargs)
         if not existed:
-            self.notify_watchers(CREATED, path)
-        self.notify_watchers(ACCESSED, path)
-        return WatchedFile(f, self, path, mode)
+            self.notify_watchers(CREATED,path)
+        self.notify_watchers(ACCESSED,path)
+        return WatchedFile(f,self,path,mode)
 
-    def setcontents(self, path, data=b'', encoding=None, errors=None, chunk_size=64*1024):
+    def setcontents(self, path, data='', chunk_size=64*1024):
         existed = self.wrapped_fs.isfile(path)
-        ret = super(WatchableFS, self).setcontents(path, data=data, encoding=encoding, errors=errors, chunk_size=chunk_size)
+        ret = super(WatchableFS, self).setcontents(path, data, chunk_size=chunk_size)
         if not existed:
-            self.notify_watchers(CREATED, path)
-        self.notify_watchers(ACCESSED, path)
+            self.notify_watchers(CREATED,path)
+        self.notify_watchers(ACCESSED,path)
         if data:
-            self.notify_watchers(MODIFIED, path, True)
+            self.notify_watchers(MODIFIED,path,True)
         return ret
 
-    def createfile(self, path, wipe=False):
+    def createfile(self, path):
         existed = self.wrapped_fs.isfile(path)
-        ret = super(WatchableFS, self).createfile(path, wipe=wipe)
+        ret = super(WatchableFS, self).createfile(path)
         if not existed:
             self.notify_watchers(CREATED,path)
         self.notify_watchers(ACCESSED,path)
@@ -557,18 +546,18 @@ class PollingWatchableFS(WatchableFS):
                 for (k,v) in new_info.iteritems():
                     if k not in old_info:
                         was_modified = True
-                        break
+                        break 
                     elif old_info[k] != v:
                         if k in ("accessed_time","st_atime",):
                             was_accessed = True
                         elif k:
                             was_modified = True
-                            break
+                            break 
                 else:
                     for k in old_info:
                         if k not in new_info:
                             was_modified = True
-                            break
+                            break 
                 if was_modified:
                     self.notify_watchers(MODIFIED,fpath,True)
                 elif was_accessed:

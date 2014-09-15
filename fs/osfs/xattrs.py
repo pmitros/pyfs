@@ -23,11 +23,8 @@ except ImportError:
 
 if xattr is not None:
 
-    class OSFSXAttrMixin(object):
+    class OSFSXAttrMixin(FS):
         """Mixin providing extended-attribute support via the 'xattr' module"""
-
-        def __init__(self, *args, **kwargs):
-            super(OSFSXAttrMixin, self).__init__(*args, **kwargs)
 
         @convert_os_errors
         def setxattr(self, path, key, value):
@@ -55,9 +52,6 @@ else:
 
     class OSFSXAttrMixin(object):
         """Mixin disable extended-attribute support."""
-
-        def __init__(self, *args, **kwargs):
-            super(OSFSXAttrMixin, self).__init__(*args, **kwargs)
 
         def getxattr(self,path,key,default=None):
             raise UnsupportedError

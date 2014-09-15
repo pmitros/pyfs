@@ -42,8 +42,6 @@ from fs.opener import fsopendir, OpenerError
 from fs.errors import *
 from fs.path import *
 
-from six import b
-
 class FSImportHook(object):
     """PEP-302-compliant module finder and loader for FS objects.
 
@@ -85,7 +83,7 @@ class FSImportHook(object):
         import machinery of the running process, if it is not already
         installed.
         """
-        for imp in enumerate(sys.path_hooks):
+        for i,imp in enumerate(sys.path_hooks):
             try:
                 if issubclass(cls,imp):
                     break
@@ -206,9 +204,9 @@ class FSImportHook(object):
         if info is None:
             info = self._get_module_info(fullname)
         (path,type,ispkg) = info
-        code = self.fs.getcontents(path, 'rb')
+        code = self.fs.getcontents(path)
         if type == imp.PY_SOURCE:
-            code = code.replace(b("\r\n"),b("\n"))
+            code = code.replace("\r\n","\n")
             return compile(code,path,"exec")
         elif type == imp.PY_COMPILED:
             if code[:4] != imp.get_magic():
@@ -225,12 +223,12 @@ class FSImportHook(object):
         (path,type,ispkg) = info
         if type != imp.PY_SOURCE:
             return None
-        return self.fs.getcontents(path, 'rb').replace(b("\r\n"),b("\n"))
+        return self.fs.getcontents(path).replace("\r\n","\n")
 
     def get_data(self,path):
         """Read the specified data file."""
         try:
-            return self.fs.getcontents(path, 'rb')
+            return self.fs.getcontents(path)
         except FSError, e:
             raise IOError(str(e))
 

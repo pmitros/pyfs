@@ -11,21 +11,21 @@ by forward slashes and with an optional leading slash).
 """
 
 import re
-import os
 
-
-_requires_normalization = re.compile(r'(^|/)\.\.?($|/)|//').search
-
-
+_requires_normalization = re.compile(r'/\.\.|\./|\.|//|\\').search
 def normpath(path):
     """Normalizes a path to be in the format expected by FS objects.
 
-    This function removes trailing slashes, collapses duplicate slashes,
-    and generally tries very hard to return a new path in the canonical FS format.
+    This function remove any leading or trailing slashes, collapses
+    duplicate slashes, replaces backward with forward slashes, and generally
+    tries very hard to return a new path string the canonical FS format.
     If the path is invalid, ValueError will be raised.
-
+    
     :param path: path to normalize
     :returns: a valid FS path
+
+    >>> normpath(r"foo\\bar\\baz")
+    'foo/bar/baz'
 
     >>> normpath("/foo//bar/frob/../baz")
     '/foo/bar/baz'
@@ -33,52 +33,42 @@ def normpath(path):
     >>> normpath("foo/../../bar")
     Traceback (most recent call last)
         ...
-    BackReferenceError: Too many backrefs in 'foo/../../bar'
+    ValueError: too many backrefs in path 'foo/../../bar'
 
     """
-
+    
     if path in ('', '/'):
         return path
-
+    
+    path = path.replace('\\', '/')
+    
     # An early out if there is no need to normalize this path
     if not _requires_normalization(path):
         return path.rstrip('/')
-
-    prefix = u'/' if path.startswith('/') else u''
+                
     components = []
     append = components.append
-    special = ('..', '.', '').__contains__
+    special = ('..', '.', '').__contains__  
     try:
         for component in path.split('/'):
             if special(component):
-                if component == '..':
+                if component == '..':                    
                     components.pop()
             else:
                 append(component)
     except IndexError:
-        # Imported here because errors imports this module (path),
-        # causing a circular import.
-        from fs.errors import BackReferenceError
-        raise BackReferenceError('Too many backrefs in \'%s\'' % path)
-    return prefix + u'/'.join(components)
-
-
-if os.sep != '/':
-    def ospath(path):
-        """Replace path separators in an OS path if required"""
-        return path.replace(os.sep, '/')
-else:
-    def ospath(path):
-        """Replace path separators in an OS path if required"""
-        return path
+        raise ValueError("too many backrefs in path '%s'" % path)
+    if path[0] == '/':
+        return '/%s' % '/'.join(components)
+    return '/'.join(components)
 
 
 def iteratepath(path, numsplits=None):
     """Iterate over the individual components of a path.
-
+    
     :param path: Path to iterate over
     :numsplits: Maximum number of splits
-
+    
     """
     path = relpath(normpath(path))
     if not path:
@@ -87,43 +77,41 @@ def iteratepath(path, numsplits=None):
         return path.split('/')
     else:
         return path.split('/', numsplits)
-
-
+        
 def recursepath(path, reverse=False):
     """Returns intermediate paths from the root to the given path
-
+    
     :param reverse: reverses the order of the paths
-
+    
     >>> recursepath('a/b/c')
     ['/', u'/a', u'/a/b', u'/a/b/c']
-
-    """
-
+    
+    """        
+    
     if path in ('', '/'):
         return [u'/']
-
-    path = abspath(normpath(path)) + '/'
-
+        
+    path = abspath(normpath(path)) + '/'    
+   
     paths = [u'/']
     find = path.find
-    append = paths.append
+    append = paths.append             
     pos = 1
-    len_path = len(path)
-
-    while pos < len_path:
-        pos = find('/', pos)
+    len_path = len(path)    
+    
+    while pos < len_path:                        
+        pos = find('/', pos)                     
         append(path[:pos])
-        pos += 1
-
+        pos += 1                            
+        
     if reverse:
         return paths[::-1]
-    return paths
+    return paths        
 
 
 def isabs(path):
     """Return True if path is an absolute path."""
     return path.startswith('/')
-
 
 def abspath(path):
     """Convert the given path to an absolute path.
@@ -142,9 +130,9 @@ def relpath(path):
 
     This is the inverse of abspath(), stripping a leading '/' from the
     path if it is present.
-
+    
     :param path: Path to adjust
-
+    
     >>> relpath('/a/b')
     'a/b'
 
@@ -154,7 +142,7 @@ def relpath(path):
 
 def pathjoin(*paths):
     """Joins any number of paths together, returning a new path string.
-
+    
     :param paths: Paths to join are given in positional arguments
 
     >>> pathjoin('foo', 'bar', 'baz')
@@ -168,10 +156,10 @@ def pathjoin(*paths):
 
     """
     absolute = False
-    relpaths = []
+    relpaths = []    
     for p in paths:
         if p:
-            if p[0] == '/':
+            if p[0] in '\\/':
                 del relpaths[:]
                 absolute = True
             relpaths.append(p)
@@ -182,27 +170,12 @@ def pathjoin(*paths):
     return path
 
 
-def pathcombine(path1, path2):
-    """Joins two paths together.
-
-    This is faster than `pathjoin`, but only works when the second path is relative,
-    and there are no backreferences in either path.
-
-    >>> pathcombine("foo/bar", "baz")
-    'foo/bar/baz'
-
-    """
-    if not path1:
-        return path2.lstrip()
-    return "%s/%s" % (path1.rstrip('/'), path2.lstrip('/'))
-
-
 def join(*paths):
     """Joins any number of paths together, returning a new path string.
 
     This is a simple alias for the ``pathjoin`` function, allowing it to be
     used as ``fs.path.join`` in direct correspondence with ``os.path.join``.
-
+    
     :param paths: Paths to join are given in positional arguments
     """
     return pathjoin(*paths)
@@ -213,7 +186,7 @@ def pathsplit(path):
 
     This function splits a path into a pair (head, tail) where 'tail' is the
     last pathname component and 'head' is all preceding components.
-
+    
     :param path: Path to split
 
     >>> pathsplit("foo/bar")
@@ -221,7 +194,7 @@ def pathsplit(path):
 
     >>> pathsplit("foo/bar/baz")
     ('foo/bar', 'baz')
-
+    
     >>> pathsplit("/foo/bar/baz")
     ('/foo/bar', 'baz')
 
@@ -246,17 +219,17 @@ def split(path):
 def splitext(path):
     """Splits the extension from the path, and returns the path (up to the last
     '.' and the extension).
-
+    
     :param path: A path to split
-
+    
     >>> splitext('baz.txt')
     ('baz', 'txt')
-
+    
     >>> splitext('foo/bar/baz.txt')
     ('foo/bar/baz', 'txt')
-
+    
     """
-
+    
     parent_path, pathname = pathsplit(path)
     if '.' not in pathname:
         return path, ''
@@ -268,18 +241,18 @@ def splitext(path):
 def isdotfile(path):
     """Detects if a path references a dot file, i.e. a resource who's name
     starts with a '.'
-
+    
     :param path: Path to check
-
+    
     >>> isdotfile('.baz')
     True
-
-    >>> isdotfile('foo/bar/.baz')
+    
+    >>> isdotfile('foo/bar/baz')
     True
-
-    >>> isdotfile('foo/bar.baz')
+    
+    >>> isdotfile('foo/bar.baz').
     False
-
+    
     """
     return basename(path).startswith('.')
 
@@ -289,15 +262,15 @@ def dirname(path):
 
     This is always equivalent to the 'head' component of the value returned
     by pathsplit(path).
-
+    
     :param path: A FS path
 
     >>> dirname('foo/bar/baz')
     'foo/bar'
-
+    
     >>> dirname('/foo/bar')
     '/foo'
-
+    
     >>> dirname('/foo')
     '/'
 
@@ -310,15 +283,15 @@ def basename(path):
 
     This is always equivalent to the 'tail' component of the value returned
     by pathsplit(path).
-
+    
     :param path: A FS path
 
     >>> basename('foo/bar/baz')
     'baz'
-
+    
     >>> basename('foo/bar')
     'bar'
-
+    
     >>> basename('foo/bar/')
     ''
 
@@ -328,7 +301,7 @@ def basename(path):
 
 def issamedir(path1, path2):
     """Return true if two paths reference a resource in the same directory.
-
+    
     :param path1: An FS path
     :param path2: An FS path
 
@@ -344,15 +317,15 @@ def issamedir(path1, path2):
 def isbase(path1, path2):
     p1 = forcedir(abspath(path1))
     p2 = forcedir(abspath(path2))
-    return p1 == p2 or p1.startswith(p2)
+    return p1 == p2 or p1.startswith(p2) 
 
 
 def isprefix(path1, path2):
     """Return true is path1 is a prefix of path2.
-
+    
     :param path1: An FS path
     :param path2: An FS path
-
+    
     >>> isprefix("foo/bar", "foo/bar/spam.txt")
     True
     >>> isprefix("foo/bar/", "foo/bar")
@@ -369,7 +342,7 @@ def isprefix(path1, path2):
         bits1.pop()
     if len(bits1) > len(bits2):
         return False
-    for (bit1, bit2) in zip(bits1, bits2):
+    for (bit1,bit2) in zip(bits1,bits2):
         if bit1 != bit2:
             return False
     return True
@@ -377,7 +350,7 @@ def isprefix(path1, path2):
 
 def forcedir(path):
     """Ensure the path ends with a trailing /
-
+    
     :param path: An FS path
 
     >>> forcedir("foo/bar")
@@ -396,30 +369,6 @@ def frombase(path1, path2):
     if not isprefix(path1, path2):
         raise ValueError("path1 must be a prefix of path2")
     return path2[len(path1):]
-
-
-def relativefrom(base, path):
-    """Return a path relative from a given base path,
-    i.e. insert backrefs as appropriate to reach the path from the base.
-
-    :param base_path: Path to a directory
-    :param path: Path you wish to make relative
-
-
-    >>> relativefrom("foo/bar", "baz/index.html")
-    '../../baz/index.html'
-
-    """
-    base = list(iteratepath(base))
-    path = list(iteratepath(path))
-
-    common = 0
-    for a, b in zip(base, path):
-        if a != b:
-            break
-        common += 1
-
-    return u'/'.join([u'..'] * (len(base) - common) + path[common:])
 
 
 class PathMap(object):
@@ -453,7 +402,7 @@ class PathMap(object):
     def __init__(self):
         self._map = {}
 
-    def __getitem__(self, path):
+    def __getitem__(self,path):
         """Get the value stored under the given path."""
         m = self._map
         for name in iteratepath(path):
@@ -466,7 +415,7 @@ class PathMap(object):
         except KeyError:
             raise KeyError(path)
 
-    def __contains__(self, path):
+    def __contains__(self,path):
         """Check whether the given path has a value stored in the map."""
         try:
             self[path]
@@ -475,22 +424,22 @@ class PathMap(object):
         else:
             return True
 
-    def __setitem__(self, path, value):
+    def __setitem__(self,path,value):
         """Set the value stored under the given path."""
         m = self._map
         for name in iteratepath(path):
             try:
                 m = m[name]
             except KeyError:
-                m = m.setdefault(name, {})
+                m = m.setdefault(name,{})
         m[""] = value
 
-    def __delitem__(self, path):
+    def __delitem__(self,path):
         """Delete the value stored under the given path."""
-        ms = [[self._map, None]]
+        ms = [[self._map,None]]
         for name in iteratepath(path):
             try:
-                ms.append([ms[-1][0][name], None])
+                ms.append([ms[-1][0][name],None])
             except KeyError:
                 raise KeyError(path)
             else:
@@ -504,19 +453,19 @@ class PathMap(object):
                 del ms[-1]
                 del ms[-1][0][ms[-1][1]]
 
-    def get(self, path, default=None):
+    def get(self,path,default=None):
         """Get the value stored under the given path, or the given default."""
         try:
             return self[path]
         except KeyError:
             return default
 
-    def pop(self, path, default=None):
+    def pop(self,path,default=None):
         """Pop the value stored under the given path, or the given default."""
-        ms = [[self._map, None]]
+        ms = [[self._map,None]]
         for name in iteratepath(path):
             try:
-                ms.append([ms[-1][0][name], None])
+                ms.append([ms[-1][0][name],None])
             except KeyError:
                 return default
             else:
@@ -531,16 +480,16 @@ class PathMap(object):
                 del ms[-1][0][ms[-1][1]]
         return val
 
-    def setdefault(self, path, value):
+    def setdefault(self,path,value):
         m = self._map
         for name in iteratepath(path):
             try:
                 m = m[name]
             except KeyError:
-                m = m.setdefault(name, {})
-        return m.setdefault("", value)
+                m = m.setdefault(name,{})
+        return m.setdefault("",value)
 
-    def clear(self, root="/"):
+    def clear(self,root="/"):
         """Clear all entries beginning with the given root path."""
         m = self._map
         for name in iteratepath(root):
@@ -550,7 +499,7 @@ class PathMap(object):
                 return
         m.clear()
 
-    def iterkeys(self, root="/", m=None):
+    def iterkeys(self,root="/",m=None):
         """Iterate over all keys beginning with the given root path."""
         if m is None:
             m = self._map
@@ -559,12 +508,12 @@ class PathMap(object):
                     m = m[name]
                 except KeyError:
                     return
-        for (nm, subm) in m.iteritems():
+        for (nm,subm) in m.iteritems():
             if not nm:
-                yield abspath(root)
+                yield abspath(normpath(root))
             else:
-                k = pathcombine(root, nm)
-                for subk in self.iterkeys(k, subm):
+                k = pathjoin(root,nm)
+                for subk in self.iterkeys(k,subm):
                     yield subk
 
     def __iter__(self):
@@ -573,9 +522,8 @@ class PathMap(object):
     def keys(self,root="/"):
         return list(self.iterkeys(root))
 
-    def itervalues(self, root="/", m=None):
+    def itervalues(self,root="/",m=None):
         """Iterate over all values whose keys begin with the given root path."""
-        root = normpath(root)
         if m is None:
             m = self._map
             for name in iteratepath(root):
@@ -583,20 +531,19 @@ class PathMap(object):
                     m = m[name]
                 except KeyError:
                     return
-        for (nm, subm) in m.iteritems():
+        for (nm,subm) in m.iteritems():
             if not nm:
                 yield subm
             else:
-                k = pathcombine(root, nm)
-                for subv in self.itervalues(k, subm):
+                k = pathjoin(root,nm)
+                for subv in self.itervalues(k,subm):
                     yield subv
 
-    def values(self, root="/"):
+    def values(self,root="/"):
         return list(self.itervalues(root))
 
-    def iteritems(self, root="/", m=None):
+    def iteritems(self,root="/",m=None):
         """Iterate over all (key,value) pairs beginning with the given root."""
-        root = normpath(root)
         if m is None:
             m = self._map
             for name in iteratepath(root):
@@ -604,18 +551,18 @@ class PathMap(object):
                     m = m[name]
                 except KeyError:
                     return
-        for (nm, subm) in m.iteritems():
+        for (nm,subm) in m.iteritems():
             if not nm:
-                yield (abspath(normpath(root)), subm)
+                yield (abspath(normpath(root)),subm)
             else:
-                k = pathcombine(root, nm)
-                for (subk, subv) in self.iteritems(k, subm):
-                    yield (subk, subv)
+                k = pathjoin(root,nm)
+                for (subk,subv) in self.iteritems(k,subm):
+                    yield (subk,subv)
 
-    def items(self, root="/"):
+    def items(self,root="/"):
         return list(self.iteritems(root))
 
-    def iternames(self, root="/"):
+    def iternames(self,root="/"):
         """Iterate over all names beneath the given root path.
 
         This is basically the equivalent of listdir() for a PathMap - it yields
@@ -627,33 +574,27 @@ class PathMap(object):
                 m = m[name]
             except KeyError:
                 return
-        for (nm, subm) in m.iteritems():
+        for (nm,subm) in m.iteritems():
             if nm and subm:
                 yield nm
 
-    def names(self, root="/"):
+    def names(self,root="/"):
         return list(self.iternames(root))
 
 
 _wild_chars = frozenset('*?[]!{}')
-
-
 def iswildcard(path):
     """Check if a path ends with a wildcard
-
+    
     >>> is_wildcard('foo/bar/baz.*')
     True
     >>> is_wildcard('foo/bar')
     False
-
+    
     """
     assert path is not None
-    return not _wild_chars.isdisjoint(path)
+    base_chars = frozenset(basename(path))
+    return bool(base_chars.intersection(_wild_chars))
 
 if __name__ == "__main__":
     print recursepath('a/b/c')
-
-    print relativefrom('/', '/foo')
-    print relativefrom('/foo/bar', '/foo/baz')
-    print relativefrom('/foo/bar/baz', '/foo/egg')
-    print relativefrom('/foo/bar/baz/egg', '/foo/egg')

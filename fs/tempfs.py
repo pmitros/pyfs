@@ -11,23 +11,29 @@ import os.path
 import time
 import tempfile
 
-from fs.base import synchronize
 from fs.osfs import OSFS
 from fs.errors import *
 
 from fs import _thread_synchronize_default
 
-
 class TempFS(OSFS):
 
     """Create a Filesystem in a temporary directory (with tempfile.mkdtemp),
     and removes it when the TempFS object is cleaned up."""
-
-    _meta = dict(OSFS._meta)
-    _meta['pickle_contents'] = False
-    _meta['network'] = False
-    _meta['atomic.move'] = True
-    _meta['atomic.copy'] = True
+    
+    _meta = { 'thread_safe' : True,
+              'virtual' : False,
+              'read_only' : False,
+              'unicode_paths' : os.path.supports_unicode_filenames,
+              'case_insensitive_paths' : os.path.normcase('Aa') == 'aa',
+              'pickle_contents': False,
+              'network' : False,
+              'atomic.move' : True,
+              'atomic.copy' : True,
+              'atomic.makedir' : True,
+              'atomic.rename' : True,
+              'atomic.setcontents' : False            
+             }
 
     def __init__(self, identifier=None, temp_dir=None, dir_mode=0700, thread_synchronize=_thread_synchronize_default):
         """Creates a temporary Filesystem
@@ -39,34 +45,33 @@ class TempFS(OSFS):
         self.identifier = identifier
         self.temp_dir = temp_dir
         self.dir_mode = dir_mode
-        self._temp_dir = tempfile.mkdtemp(identifier or "TempFS", dir=temp_dir)
+        self._temp_dir = tempfile.mkdtemp(identifier or "TempFS",dir=temp_dir)
         self._cleaned = False
         super(TempFS, self).__init__(self._temp_dir, dir_mode=dir_mode, thread_synchronize=thread_synchronize)
 
-    def __repr__(self):
+    def __str__(self):
         return '<TempFS: %s>' % self._temp_dir
 
-    __str__ = __repr__
+    __repr__ = __str__
 
     def __unicode__(self):
         return u'<TempFS: %s>' % self._temp_dir
-
+    
     def __getstate__(self):
         # If we are picking a TempFS, we want to preserve its contents,
         # so we *don't* do the clean
         state = super(TempFS, self).__getstate__()
         self._cleaned = True
         return state
-
-    def __setstate__(self, state):
-        state = super(TempFS, self).__setstate__(state)
-        self._cleaned = False
-        #self._temp_dir = tempfile.mkdtemp(self.identifier or "TempFS", dir=self.temp_dir)
+    
+    def __setstate__(self, state):        
+        state = super(TempFS, self).__setstate__(state)  
+        self._cleaned = False      
+        #self._temp_dir = tempfile.mkdtemp(self.identifier or "TempFS", dir=self.temp_dir)  
         #super(TempFS, self).__init__(self._temp_dir,
         #                             dir_mode=self.dir_mode,
-        #                             thread_synchronize=self.thread_synchronize)
+        #                             thread_synchronize=self.thread_synchronize)      
 
-    @synchronize
     def close(self):
         """Removes the temporary directory.
 
@@ -75,13 +80,13 @@ class TempFS(OSFS):
         Note that once this method has been called, the FS object may
         no longer be used.
         """
-        super(TempFS, self).close()
+        super(TempFS,self).close()
         #  Depending on how resources are freed by the OS, there could
         #  be some transient errors when freeing a TempFS soon after it
         #  was used.  If they occur, do a small sleep and try again.
         try:
             self._close()
-        except (ResourceLockedError, ResourceInvalidError):
+        except (ResourceLockedError,ResourceInvalidError):
             time.sleep(0.5)
             self._close()
 
@@ -99,23 +104,20 @@ class TempFS(OSFS):
             try:
                 # shutil.rmtree doesn't handle long paths on win32,
                 # so we walk the tree by hand.
-                entries = os.walk(self.root_path, topdown=False)
-                for (dir, dirnames, filenames) in entries:
+                entries = os.walk(self.root_path,topdown=False)
+                for (dir,dirnames,filenames) in entries:
                     for filename in filenames:
                         try:
-                            os_remove(os.path.join(dir, filename))
+                            os_remove(os.path.join(dir,filename))
                         except ResourceNotFoundError:
                             pass
                     for dirname in dirnames:
                         try:
-                            os_rmdir(os.path.join(dir, dirname))
+                            os_rmdir(os.path.join(dir,dirname))
                         except ResourceNotFoundError:
                             pass
-                try:
-                    os.rmdir(self.root_path)
-                except OSError:
-                    pass
+                os.rmdir(self.root_path)
                 self._cleaned = True
             finally:
                 self._lock.release()
-        super(TempFS, self).close()
+        super(TempFS,self).close()

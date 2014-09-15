@@ -170,7 +170,7 @@ class OSFSWatchMixin(WatchableFSMixin):
         if inevt.mask & pyinotify.IN_MODIFY:
             watcher.handle_event(MODIFIED(self,path,True))
         if inevt.mask & pyinotify.IN_CLOSE_WRITE:
-            watcher.handle_event(MODIFIED(self,path,True, closed=True))
+            watcher.handle_event(MODIFIED(self,path,True))
         if inevt.mask & pyinotify.IN_MOVED_FROM:
             # Sorry folks, I'm not up for decoding the destination path.
             watcher.handle_event(MOVED_SRC(self,path,None))
@@ -184,7 +184,7 @@ class OSFSWatchMixin(WatchableFSMixin):
             watcher.handle_event(OVERFLOW(self))
         if inevt.mask & pyinotify.IN_UNMOUNT:
             watcher.handle_event(CLOSE(self))
-
+        
     def __get_watch_thread(self):
         """Get the shared watch thread, initializing if necessary.
 
@@ -219,7 +219,7 @@ class SharedThreadedNotifier(threading.Thread):
         self.watchers[fd] = watcher
         self._poller.register(fd,select.POLLIN)
         #  Bump the poll object so it recognises the new fd.
-        os.write(self._pipe_w,b"H")
+        os.write(self._pipe_w,"H")
 
     def del_watcher(self,watcher):
         fd = watcher._pyinotify_WatchManager.get_fd()

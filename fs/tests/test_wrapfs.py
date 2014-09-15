@@ -15,15 +15,10 @@ import tempfile
 from fs import osfs
 from fs.errors import * 
 from fs.path import *
-from fs.utils import remove_all
+
+
 from fs import wrapfs
-
-import six
-from six import PY3, b
-
 class TestWrapFS(unittest.TestCase, FSTestCases, ThreadingTestCases):
-    
-    #__test__ = False
     
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp(u"fstest")
@@ -62,7 +57,7 @@ class TestLimitSizeFS(TestWrapFS):
         self.fs = LimitSizeFS(self.fs,1024*1024*2)  # 2MB limit
 
     def tearDown(self):
-        remove_all(self.fs, "/")
+        self.fs.removedir("/",force=True)
         self.assertEquals(self.fs.cur_size,0)
         super(TestLimitSizeFS,self).tearDown()
         self.fs.close()
@@ -72,7 +67,7 @@ class TestLimitSizeFS(TestWrapFS):
         for i in xrange(1024*2):
             try:
                 total_written += 1030
-                self.fs.setcontents("file %i" % i, b("C")*1030)
+                self.fs.setcontents("file"+str(i),"C"*1030)
             except StorageSpaceError:
                 self.assertTrue(total_written > 1024*1024*2)
                 self.assertTrue(total_written < 1024*1024*2 + 1030)

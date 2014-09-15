@@ -20,18 +20,23 @@ Other useful classes include:
                     (think e.g. compression or decryption).
 
     * SpooledTemporaryFile:  a version of the builtin SpooledTemporaryFile
-                             class, patched to more closely preserve the
+                             class, patched to more closely preserve the 
                              semantics of a standard file.
 
     * LimitBytesFile:  a filelike wrapper that limits the total bytes read
                        from a file; useful for turning a socket into a file
                        without reading past end-of-data.
 
-"""
+""" 
 # Copyright (C) 2006-2009, Ryan Kelly
 # All rights reserved; available under the terms of the MIT License.
 
 import tempfile as _tempfile
+
+try:
+    from cStringIO import StringIO as _StringIO
+except ImportError:
+    from StringIO import StringIO as _StringIO
 
 import fs
 
@@ -45,34 +50,23 @@ class NotSeekableError(IOError):
 class NotTruncatableError(IOError):
     pass
 
-import six
-from six import PY3, b
-
-if PY3:
-    from six import BytesIO as _StringIO
-else:
-    try:
-        from cStringIO import StringIO as _StringIO
-    except ImportError:
-        from StringIO import StringIO as _StringIO
-
 
 class FileLikeBase(object):
     """Base class for implementing file-like objects.
-
+    
     This class takes a lot of the legwork out of writing file-like objects
     with a rich interface.  It implements the higher-level file-like methods
     on top of five primitive methods: _read, _write, _seek, _tell and
     _truncate. See their docstrings for precise details on how these methods
     behave.
-
+    
     Subclasses then need only implement some subset of these methods for
     rich file-like interface compatibility.  They may of course override
     other methods as desired.
 
     The class is missing the following attributes and methods, which don't
     really make sense for anything but real files:
-
+        
         * fileno()
         * isatty()
         * encoding
@@ -104,7 +98,7 @@ class FileLikeBase(object):
     expensive to simulate (e.g. compressed files).  Note that any file
     opened for both reading and writing must also support seeking.
     """
-
+    
     def __init__(self,bufsize=1024*64):
         """FileLikeBase Constructor.
 
@@ -121,8 +115,8 @@ class FileLikeBase(object):
         self._rbuffer = None     # data that's been read but not returned
         self._wbuffer = None     # data that's been given but not written
         self._sbuffer = None     # data between real & apparent file pos
-        self._soffset = 0        # internal offset of file pointer
-
+        self._soffset = 0        # internal offset of file pointer        
+    
     #
     #  The following five methods are the ones that subclasses are expected
     #  to implement.  Carefully check their docstrings.
@@ -130,33 +124,33 @@ class FileLikeBase(object):
 
     def _read(self,sizehint=-1):
         """Read approximately <sizehint> bytes from the file-like object.
-
+        
         This method is to be implemented by subclasses that wish to be
         readable.  It should read approximately <sizehint> bytes from the
         file and return them as a string.  If <sizehint> is missing or
         less than or equal to zero, try to read all the remaining contents.
-
+        
         The method need not guarantee any particular number of bytes -
         it may return more bytes than requested, or fewer.  If needed the
         size hint may be completely ignored.  It may even return an empty
         string if no data is yet available.
-
+        
         Because of this, the method must return None to signify that EOF
         has been reached.  The higher-level methods will never indicate EOF
         until None has been read from _read().  Once EOF is reached, it
         should be safe to call _read() again, immediately returning None.
         """
         raise NotReadableError("Object not readable")
-
+    
     def _write(self,string,flushing=False):
         """Write the given string to the file-like object.
-
+        
         This method must be implemented by subclasses wishing to be writable.
         It must attempt to write as much of the given data as possible to the
         file, but need not guarantee that it is all written.  It may return
         None to indicate that all data was written, or return as a string any
         data that could not be written.
-
+        
         If the keyword argument 'flushing' is true, it indicates that the
         internal write buffers are being flushed, and *all* the given data
         is expected to be written to the file. If unwritten data is returned
@@ -166,7 +160,7 @@ class FileLikeBase(object):
 
     def _seek(self,offset,whence):
         """Set the file's internal position pointer, approximately.
-
+ 
         This method should set the file's position to approximately 'offset'
         bytes relative to the position specified by 'whence'.  If it is
         not possible to position the pointer exactly at the given offset,
@@ -234,15 +228,15 @@ class FileLikeBase(object):
         if "+" in mstr:
             return True
         if "-" in mstr and "-" not in mode:
-            return False
+            return False    
         if "r" in mode:
             if "r" not in mstr:
-                return False
+                return False    
         if "w" in mode:
             if "w" not in mstr and "a" not in mstr:
                 return False
         return True
-
+        
     def _assert_mode(self,mode,mstr=None):
         """Check whether the file may be accessed in the given mode.
 
@@ -265,22 +259,22 @@ class FileLikeBase(object):
             if "w" not in mstr and "a" not in mstr:
                 raise NotWritableError("File not opened for writing")
         return True
-
+    
     def flush(self):
         """Flush internal write buffer, if necessary."""
         if self.closed:
             raise IOError("File has been closed")
         if self._check_mode("w-") and self._wbuffer is not None:
-            buffered = b("")
+            buffered = ""
             if self._sbuffer:
                 buffered = buffered + self._sbuffer
                 self._sbuffer = None
             buffered = buffered + self._wbuffer
             self._wbuffer = None
             leftover = self._write(buffered,flushing=True)
-            if leftover and not isinstance(leftover, int):
+            if leftover:
                 raise IOError("Could not flush write buffer.")
-
+    
     def close(self):
         """Flush write buffers and close the file.
 
@@ -304,7 +298,7 @@ class FileLikeBase(object):
     def __exit__(self,exc_type,exc_val,exc_tb):
         self.close()
         return False
-
+    
     def next(self):
         """next() method complying with the iterator protocol.
 
@@ -312,10 +306,10 @@ class FileLikeBase(object):
         next() returning subsequent lines from the file.
         """
         ln = self.readline()
-        if ln == b(""):
+        if ln == "":
             raise StopIteration()
         return ln
-
+    
     def __iter__(self):
         return self
 
@@ -402,7 +396,7 @@ class FileLikeBase(object):
         if self._soffset:
             pos = pos + self._soffset
         return pos
-
+    
     def read(self,size=-1):
         """Read at most 'size' bytes from the file.
 
@@ -443,24 +437,24 @@ class FileLikeBase(object):
                 s -= self._bufsize
             self._do_read(s)
         # Should the entire file be read?
-        if size < 0:
+        if size <= 0:
             if self._rbuffer:
                 data = [self._rbuffer]
             else:
                 data = []
-            self._rbuffer = b("")
+            self._rbuffer = ""
             newData = self._read()
             while newData is not None:
                 data.append(newData)
                 newData = self._read()
-            output = b("").join(data)
+            output = "".join(data)
         # Otherwise, we need to return a specific amount of data
         else:
             if self._rbuffer:
                 newData = self._rbuffer
                 data = [newData]
             else:
-                newData = b("")
+                newData = ""
                 data = []
             sizeSoFar = len(newData)
             while sizeSoFar < size:
@@ -469,22 +463,22 @@ class FileLikeBase(object):
                     break
                 data.append(newData)
                 sizeSoFar += len(newData)
-            data = b("").join(data)
+            data = "".join(data)
             if sizeSoFar > size:
                 # read too many bytes, store in the buffer
                 self._rbuffer = data[size:]
                 data = data[:size]
             else:
-                self._rbuffer = b("")
+                self._rbuffer = ""
             output = data
         return output
 
     def _do_read_rest(self):
         """Private method to read the file through to EOF."""
         data = self._do_read(self._bufsize)
-        while data != b(""):
+        while data != "":
             data = self._do_read(self._bufsize)
-
+        
     def readline(self,size=-1):
         """Read a line from the file, or at most <size> bytes."""
         bits = []
@@ -494,15 +488,15 @@ class FileLikeBase(object):
             nextBit = self.read(self._bufsize)
             bits.append(nextBit)
             sizeSoFar += len(nextBit)
-            if nextBit == b(""):
+            if nextBit == "":
                 break
             if size > 0 and sizeSoFar >= size:
                 break
-            indx = nextBit.find(b("\n"))
+            indx = nextBit.find("\n")
         # If not found, return whole string up to <size> length
         # Any leftovers are pushed onto front of buffer
         if indx == -1:
-            data = b("").join(bits)
+            data = "".join(bits)
             if size > 0 and sizeSoFar > size:
                 extra = data[size:]
                 data = data[:size]
@@ -514,12 +508,12 @@ class FileLikeBase(object):
         extra = bits[-1][indx:]
         bits[-1] = bits[-1][:indx]
         self._rbuffer = extra + self._rbuffer
-        return b("").join(bits)
-
+        return "".join(bits)
+    
     def readlines(self,sizehint=-1):
         """Return a list of all lines in the file."""
         return [ln for ln in self]
-
+    
     def xreadlines(self):
         """Iterator over lines in the file - equivalent to iter(self)."""
         return iter(self)
@@ -531,7 +525,7 @@ class FileLikeBase(object):
         self._assert_mode("w-")
         # If we were previously reading, ensure position is correct
         if self._rbuffer is not None:
-            self.seek(0, 1)
+            self.seek(0,1)
         # If we're actually behind the apparent position, we must also
         # write the data in the gap.
         if self._sbuffer:
@@ -544,17 +538,15 @@ class FileLikeBase(object):
                 string = self._do_read(s) + string
             except NotReadableError:
                 raise NotSeekableError("File not readable, could not complete simulation of seek")
-            self.seek(0, 0)
+            self.seek(0,0)
         if self._wbuffer:
             string = self._wbuffer + string
         leftover = self._write(string)
-        if leftover is None or isinstance(leftover, int):
-            self._wbuffer = b("")
-            return len(string) - (leftover or 0)
+        if leftover is None:
+            self._wbuffer = ""
         else:
             self._wbuffer = leftover
-            return len(string) - len(leftover)
-
+    
     def writelines(self,seq):
         """Write a sequence of lines to the file."""
         for ln in seq:
@@ -563,7 +555,7 @@ class FileLikeBase(object):
 
 class FileWrapper(FileLikeBase):
     """Base class for objects that wrap a file-like object.
-
+    
     This class provides basic functionality for implementing file-like
     objects that wrap another file-like object to alter its functionality
     in some way.  It takes care of house-keeping duties such as flushing
@@ -573,7 +565,7 @@ class FileWrapper(FileLikeBase):
     By convention, the subclass's constructor should accept this as its
     first argument and pass it to its superclass's constructor in the
     same position.
-
+    
     This class provides a basic implementation of _read() and _write()
     which just calls read() and write() on the wrapped object.  Subclasses
     will probably want to override these.
@@ -583,10 +575,10 @@ class FileWrapper(FileLikeBase):
 
     def __init__(self,wrapped_file,mode=None):
         """FileWrapper constructor.
-
+        
         'wrapped_file' must be a file-like object, which is to be wrapped
         in another file-like object to provide additional functionality.
-
+        
         If given, 'mode' must be the access mode string under which
         the wrapped file is to be accessed.  If not given or None, it
         is looked up on the wrapped file if possible.  Otherwise, it
@@ -657,12 +649,12 @@ class FileWrapper(FileLikeBase):
 
     def _read(self,sizehint=-1):
         data = self.wrapped_file.read(sizehint)
-        if data == b(""):
+        if data == "":
             return None
         return data
 
     def _write(self,string,flushing=False):
-        self.wrapped_file.write(string)
+        return self.wrapped_file.write(string)
 
     def _seek(self,offset,whence):
         self.wrapped_file.seek(offset,whence)
@@ -702,7 +694,7 @@ class StringIO(FileWrapper):
         if size > curlen:
             self.wrapped_file.seek(curlen)
             try:
-                self.wrapped_file.write(b("\x00")*(size-curlen))
+                self.wrapped_file.write("\x00"*(size-curlen))
             finally:
                 self.wrapped_file.seek(pos)
 
@@ -724,7 +716,6 @@ class SpooledTemporaryFile(FileWrapper):
             stf_args = (max_size,mode,bufsize) + args
             wrapped_file = _tempfile.SpooledTemporaryFile(*stf_args,**kwds)
             wrapped_file._file = StringIO()
-            #wrapped_file._file = six.BytesIO()
             self.__is_spooled = True
         except AttributeError:
             ntf_args = (mode,bufsize) + args
